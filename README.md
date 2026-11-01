@@ -75,7 +75,55 @@ Saifu — iOS-застосунок для обліку готівкових ви
 
 ## Де реалізовано конструкції Swift
 
-<!-- Буде заповнено пізніше. -->
+| Конструкція | Файл | Тип/метод | Пояснення |
+|---|---|---|---|
+| `struct` | `Models/Expense.swift` | `Expense` | Значеннєвий тип: витрата копіюється при передачі |
+| `struct` | `Models/CashTopUp.swift`, `Models/Reconciliation.swift` | `CashTopUp`, `Reconciliation` | Поповнення та результат звірки |
+| `class` | `Models/CashWallet.swift` | `CashWallet` | Посилальний тип: один гаманець спільний для екранів, змінюється на місці |
+| `protocol` | `Models/WalletEntry.swift` | `WalletEntry` | Спільний контракт `Expense` і `CashTopUp` (`amount`, `date`, `signedAmount`) |
+| `enum` | `Models/Currency.swift` | `Currency` | Валюти з `rawValue` і `CaseIterable` |
+| `enum` | `Models/ExpenseCategory.swift`, `Models/CashTopUp.swift`, `Models/WalletError.swift` | `ExpenseCategory`, `TopUpSource`, `WalletError` | Категорії, джерело поповнення, помилка гаманця (`Error`) |
+| `let` | `Models/Expense.swift` | `Expense.id`, `Expense.date` | Незмінні після створення |
+| `var` | `Models/Expense.swift` | `Expense.amount`, `Expense.category` | Змінювані значення |
+| `var` (локальна) | `Models/Currency.swift` | `format(_:)` — `divisor`, `result` | Локальні змінні, що змінюються в циклі |
+| Збережені властивості | `Models/CashWallet.swift` | `name`, `currency`, `lastReconciliation` | Дані гаманця; `private(set) var expenses`/`topUps` читаються ззовні, змінюються лише методами |
+| Обчислювані властивості | `Models/Currency.swift`, `Models/CashWallet.swift`, `Models/Reconciliation.swift` | `Currency.code`/`symbol`/`minorUnits`, `CashWallet.expectedBalance`/`formattedBalance`, `Reconciliation.difference`, `Expense.signedAmount` | Значення рахуються з інших даних і не зберігаються |
+| Методи | `Models/CashWallet.swift` | `addTopUp`, `addExpense`, `expense(with:)`, `expenses(in:)`, `totalsByCategory()`, `reconcile(actualCash:)` | Поведінка гаманця |
+| `mutating` метод | `Models/Expense.swift` | `Expense.update(category:amount:)` | Змінює `struct` на місці |
+| `init` | `Models/Expense.swift`, `Models/CashTopUp.swift`, `Models/Reconciliation.swift`, `Models/CashWallet.swift` | `Expense.init(...)`, `CashTopUp.init(...)`, `Reconciliation.init(...)`, `CashWallet.init(name:currency:)` | Ініціалізатори; у `struct` — зі значеннями за замовчуванням (`id`, `date`) |
+| Колекції | `Models/CashWallet.swift` | `[Expense]`, `[CashTopUp]`, `[ExpenseCategory: Int]` | Масиви записів і словник підсумків |
+| Optional | `Models/Expense.swift`, `Models/CashWallet.swift` | `Expense.note`, `Expense.receiptID`, `CashWallet.lastReconciliation` | Значення може бути відсутнім (`nil`) |
+| `if let` | `Models/Expense.swift`, `ContentView.swift`, `Demo/DemoScenario.swift` | `Expense.update`, `ContentView.row`, `DemoScenario.run()` (крок 6) | Безпечне розгортання optional |
+| `??` | `Models/CashWallet.swift`, `Demo/DemoScenario.swift` | `totalsByCategory()`, `describe(_:in:)` | Значення за замовчуванням для `nil` (0 або «без нотатки») |
+| `guard` | `Models/CashWallet.swift` | `addTopUp`, `addExpense`, `reconcile(actualCash:)` | Рання відмова при некоректній сумі. `guard let` у коді не використовується |
+| `if` | `Models/Currency.swift` | `format(_:)`, `groupThousands(_:)` | Умови: дробова частина лише для валют із копійками, пробіл між тисячами |
+| `switch` | `Models/Currency.swift`, `Models/ExpenseCategory.swift`, `Models/CashWallet.swift` | `symbol`, `minorUnits`, `title`, `emoji`, `reconcile(actualCash:)` | Розгалуження по enum та по знаку різниці |
+| `for-in` | `Models/CashWallet.swift`, `Models/Currency.swift`, `Demo/DemoScenario.swift` | `totalsByCategory()`, `format(_:)`, `groupThousands(_:)`, `run()` | Перебір записів, цифр, категорій |
+| `filter` | `Models/CashWallet.swift` | `expenses(in:)` | Витрати однієї категорії |
+| `map` | `Models/CashWallet.swift`, `Demo/DemoScenario.swift` | `expenseSummaries()`, `run()` (крок 3) | Перетворення витрат на рядки |
+| `reduce` | `Models/CashWallet.swift` | `expectedBalance` | Баланс як сума `signedAmount` по всіх записах |
+| `throws` | `Models/CashWallet.swift` | `addTopUp`, `addExpense`, `reconcile(actualCash:)` | Методи кидають `WalletError.negativeAmount` |
+| `do` / `try` / `catch` | `Demo/DemoScenario.swift` | `run()` (кроки 2–8) | Виклики, що кидають помилки; у кроці 8 перехоплюється `WalletError.negativeAmount` |
+
+## Як перевірити сценарій
+
+1. Відкрити `Saifu.xcodeproj` в Xcode 27.2 або новішому.
+2. Обрати симулятор iPhone.
+3. Запустити застосунок (⌘R).
+4. Відкрити консоль (⇧⌘C).
+
+На екрані з'являється список із двома гаманцями («Єни» та «Гривні») та їхніми операціями. У консолі при старті друкується сценарій із 8 кроків:
+
+1. **Створення гаманця «Єни» (JPY).**
+2. **Поповнення:** `+ 20 000 ¥`.
+3. **Витрати:** 7-Eleven 580 ¥, обід 950 ¥ та ICOCA 3 000 ¥ (остання без нотатки, виводиться «без нотатки»).
+4. **Очікуваний баланс:** `15 470 ¥`.
+5. **Звірка:** у гаманці реально 15 100 ¥, недостача `370 ¥` записується як «Невідстежене».
+6. **Витрати за категоріями** (🏪 580 ¥, 🍜 950 ¥, 🚆 3 000 ¥, ❓ 370 ¥) і баланс після звірки: `15 100 ¥`.
+7. **Гаманець «Гривні» (UAH):** `+ 1 000,00 ₴, − 45,50 ₴`, баланс `954,50 ₴`.
+8. **Від'ємна сума:** перехоплена помилка `WalletError.negativeAmount`, у консолі «Помилка: сума має бути додатною, витрату не додано», баланс лишається `954,50 ₴`.
+
+Системні повідомлення симулятора в кінці консолі не є помилками застосунку.
 
 ## Внесок учасників
 
