@@ -30,9 +30,11 @@ Saifu — iOS-застосунок для обліку готівкових ви
 |---|---|---|
 | `Currency` | Валюта (enum) | `code` (наприклад, JPY, UAH, USD), `symbol`, `minorUnits` (кількість знаків після коми) |
 | `Expense` | Витрата (`Identifiable`) | `let id: UUID`, `amount: Int` (у найменших одиницях), `category`, `date`, `note?`, `receiptID?` |
-| `CashTopUp` | Поповнення гаманця (`Identifiable`) | `let id: UUID`, `amount`, `date` |
+| `CashTopUp` | Поповнення гаманця (`Identifiable`) | `let id: UUID`, `amount`, `date`, `source: TopUpSource` |
+| `TopUpSource` | Джерело поповнення (enum) | `atm` (банкомат), `correction` (коригувальне поповнення при надлишку) |
 | `CashWallet` | Гаманець | `name`, `currency`, `expenses`, `topUps`, `lastReconciliation?` |
 | `Reconciliation` | Результат звірки | `expected`, `actual`, `difference`, `date` |
+| `WalletError` | Помилка операції з гаманцем (enum, `Error`) | `negativeAmount` (від'ємна або нульова сума витрати чи поповнення, від'ємна фактична готівка) |
 
 `id` потрібен для пошуку `expense(with id:)`, для `List` у SwiftUI та для передачі `Expense.ID` між екранами.
 
@@ -42,7 +44,8 @@ Saifu — iOS-застосунок для обліку готівкових ви
 - Баланс = сума поповнень − сума витрат.
 - Різниця: `difference = expected − actual`.
   - Недостача (`difference > 0`): записується витрата категорії `untracked`.
-  - Надлишок (`difference < 0`): записується коригувальне поповнення.
+  - Надлишок (`difference < 0`): записується коригувальне поповнення із `source: .correction`.
+- `addExpense`, `addTopUp` і `reconcile` кидають `WalletError.negativeAmount` при некоректній сумі.
 
 Категорії загальні для всіх країн. Місцева специфіка (наприклад, назви магазинів) не входить у моделі, лише у словники підказки категорії.
 
