@@ -36,23 +36,28 @@ final class WalletViewModel {
         wallets.indices.contains(selectedIndex) ? wallets[selectedIndex] : nil
     }
 
-    /// View → ViewModel → CashWallet → Repository; після цього оновлюємо стан екрана.
+    /// View → ViewModel → ExpenseBuilder → CashWallet → Repository; після цього оновлюємо стан екрана.
     /// Повертає true, якщо витрату додано.
     @discardableResult
-    func addExpense(amountText: String, category: ExpenseCategory) -> Bool {
+    func addExpense(amountText: String, category: ExpenseCategory?, note: String) -> Bool {
         guard let wallet = selectedWallet else { return false }
-        guard let amount = parseAmount(amountText, currency: wallet.currency) else {
-            errorMessage = "Некоректна сума"
-            return false
-        }
         do {
-            try wallet.addExpense(Expense(amount: amount, category: category))
+            let expense = try ExpenseBuilder(currency: wallet.currency)
+                .amount(amountText)
+                .category(category)
+                .note(note)
+                .build()
+            try wallet.addExpense(expense)
             repository.save(wallet)
             errorMessage = nil
             reload()
             return true
         } catch WalletError.negativeAmount {
             errorMessage = "Сума має бути більшою за нуль"
+        } catch WalletError.invalidAmount {
+            errorMessage = "Некоректна сума"
+        } catch WalletError.missingCategory {
+            errorMessage = "Оберіть категорію"
         } catch {
             errorMessage = "Не вдалося додати витрату"
         }
@@ -82,22 +87,5 @@ final class WalletViewModel {
                      isNegative: expense.signedAmount < 0)
         }
         rows = topUpRows + expenseRows
-    }
-
-    /// "45,50" або "45.50" → 4550 (без Double). nil, якщо текст не число або знаків забагато.
-    private func parseAmount(_ text: String, currency: Currency) -> Int? {
-        let normalized = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
-        let parts = normalized.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count <= 2, let whole = Int(parts[0]) else { return nil }
-
-        var fractionDigits = parts.count == 2 ? String(parts[1]) : ""
-        guard fractionDigits.count <= currency.minorUnits,
-              fractionDigits.allSatisfy(\.isNumber) else { return nil }
-        // Доповнюємо нулями справа: "5" при 2 знаках → "50"
-        fractionDigits += String(repeating: "0", count: currency.minorUnits - fractionDigits.count)
-
-        var divisor = 1
-        for _ in 0..<currency.minorUnits { divisor *= 10 }
-        return whole * divisor + (Int(fractionDigits) ?? 0)
     }
 }

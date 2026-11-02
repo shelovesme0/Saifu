@@ -3,7 +3,8 @@ import SwiftUI
 struct WalletView: View {
     @Bindable var viewModel: WalletViewModel
     @State private var amountText = ""
-    @State private var category: ExpenseCategory = .food
+    @State private var category: ExpenseCategory?
+    @State private var note = ""
 
     var body: some View {
         List {
@@ -21,9 +22,11 @@ struct WalletView: View {
             Section("Нова витрата") {
                 TextField("Сума", text: $amountText)
                     .keyboardType(.decimalPad)
+                TextField("Нотатка", text: $note)
                 Picker("Категорія", selection: $category) {
+                    Text("— оберіть —").tag(ExpenseCategory?.none)
                     ForEach(ExpenseCategory.allCases, id: \.self) { category in
-                        Text("\(category.emoji) \(category.title)").tag(category)
+                        Text("\(category.emoji) \(category.title)").tag(ExpenseCategory?.some(category))
                     }
                 }
                 if let message = viewModel.errorMessage {
@@ -31,8 +34,10 @@ struct WalletView: View {
                         .foregroundStyle(.red)
                 }
                 Button("Додати") {
-                    if viewModel.addExpense(amountText: amountText, category: category) {
+                    if viewModel.addExpense(amountText: amountText, category: category, note: note) {
                         amountText = ""
+                        note = ""
+                        category = nil
                     }
                 }
             }
