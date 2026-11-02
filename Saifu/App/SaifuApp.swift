@@ -17,7 +17,8 @@ struct SaifuApp: App {
             KeywordCategoryStrategy(
                 dictionary: CategoryDictionaries.english.merging(CategoryDictionaries.ukrainian) { first, _ in first }
             )
-        ])
+        ]),
+        rateProvider: NBURateAdapter(source: DemoNBURecordSource())
     )
 
     var body: some Scene {

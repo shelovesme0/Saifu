@@ -10,22 +10,30 @@ struct EntryRow: Identifiable {
     let isNegative: Bool
 }
 
+@MainActor
 @Observable
 final class WalletViewModel {
     private let repository: WalletRepository
     private let categoryStrategy: any CategorySuggestionStrategy
+    private let rateProvider: any ExchangeRateProvider
+    private var rateTask: Task<Void, Never>?
 
     private(set) var wallets: [CashWallet] = []
     var selectedIndex = 0 {
         didSet { reload() }
     }
     private(set) var balanceText = ""
+    /// Баланс у гривнях; nil для гривневого гаманця або поки курс не отримано.
+    private(set) var convertedBalanceText: String?
     private(set) var rows: [EntryRow] = []
     private(set) var errorMessage: String?
 
-    init(repository: WalletRepository, categoryStrategy: any CategorySuggestionStrategy) {
+    init(repository: WalletRepository,
+         categoryStrategy: any CategorySuggestionStrategy,
+         rateProvider: any ExchangeRateProvider) {
         self.repository = repository
         self.categoryStrategy = categoryStrategy
+        self.rateProvider = rateProvider
         wallets = repository.wallets()
         reload()
     }
@@ -78,10 +86,12 @@ final class WalletViewModel {
     private func reload() {
         guard let wallet = selectedWallet else {
             balanceText = ""
+            convertedBalanceText = nil
             rows = []
             return
         }
         balanceText = wallet.formattedBalance
+        updateConvertedBalance(for: wallet)
         let topUpRows = wallet.topUps.map { topUp in
             EntryRow(id: topUp.id,
                      title: topUp.source == .atm ? "🏧 Поповнення" : "➕ Коригування",
@@ -97,5 +107,19 @@ final class WalletViewModel {
                      isNegative: expense.signedAmount < 0)
         }
         rows = topUpRows + expenseRows
+    }
+
+    /// Курс беремо асинхронно; застарілий запит скасовуємо при зміні гаманця чи балансу.
+    private func updateConvertedBalance(for wallet: CashWallet) {
+        rateTask?.cancel()
+        convertedBalanceText = nil
+        guard wallet.currency != .uah else { return }
+
+        let balance = wallet.expectedBalance
+        let currency = wallet.currency
+        rateTask = Task {
+            guard let rate = try? await rateProvider.rate(for: currency), !Task.isCancelled else { return }
+            convertedBalanceText = "≈ " + Currency.uah.format(rate.toUAHMinor(balance))
+        }
     }
 }

@@ -17,6 +17,10 @@ struct WalletView: View {
                 .pickerStyle(.segmented)
                 Text(viewModel.balanceText)
                     .font(.largeTitle)
+                if let converted = viewModel.convertedBalanceText {
+                    Text(converted)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Нова витрата") {
@@ -69,5 +73,9 @@ struct WalletView: View {
 }
 
 #Preview {
-    WalletView(viewModel: WalletViewModel(repository: DemoWalletRepository(), categoryStrategy: ChainedCategoryStrategy([])))
+    WalletView(viewModel: WalletViewModel(
+        repository: DemoWalletRepository(),
+        categoryStrategy: ChainedCategoryStrategy([]),
+        rateProvider: NBURateAdapter(source: DemoNBURecordSource())
+    ))
 }
