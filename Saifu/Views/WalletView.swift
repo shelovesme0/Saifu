@@ -23,6 +23,11 @@ struct WalletView: View {
                 TextField("Сума", text: $amountText)
                     .keyboardType(.decimalPad)
                 TextField("Нотатка", text: $note)
+                    .onChange(of: note) {
+                        if let suggested = viewModel.suggestedCategory(for: note) {
+                            category = suggested
+                        }
+                    }
                 Picker("Категорія", selection: $category) {
                     Text("— оберіть —").tag(ExpenseCategory?.none)
                     ForEach(ExpenseCategory.allCases, id: \.self) { category in
@@ -64,5 +69,5 @@ struct WalletView: View {
 }
 
 #Preview {
-    WalletView(viewModel: WalletViewModel(repository: DemoWalletRepository()))
+    WalletView(viewModel: WalletViewModel(repository: DemoWalletRepository(), categoryStrategy: ChainedCategoryStrategy([])))
 }

@@ -13,6 +13,7 @@ struct EntryRow: Identifiable {
 @Observable
 final class WalletViewModel {
     private let repository: WalletRepository
+    private let categoryStrategy: any CategorySuggestionStrategy
 
     private(set) var wallets: [CashWallet] = []
     var selectedIndex = 0 {
@@ -22,8 +23,9 @@ final class WalletViewModel {
     private(set) var rows: [EntryRow] = []
     private(set) var errorMessage: String?
 
-    init(repository: WalletRepository) {
+    init(repository: WalletRepository, categoryStrategy: any CategorySuggestionStrategy) {
         self.repository = repository
+        self.categoryStrategy = categoryStrategy
         wallets = repository.wallets()
         reload()
     }
@@ -34,6 +36,11 @@ final class WalletViewModel {
 
     var selectedWallet: CashWallet? {
         wallets.indices.contains(selectedIndex) ? wallets[selectedIndex] : nil
+    }
+
+    /// Підказка категорії за нотаткою для форми.
+    func suggestedCategory(for note: String) -> ExpenseCategory? {
+        categoryStrategy.suggest(for: note)
     }
 
     /// View → ViewModel → ExpenseBuilder → CashWallet → Repository; після цього оновлюємо стан екрана.
@@ -49,6 +56,9 @@ final class WalletViewModel {
                 .build()
             try wallet.addExpense(expense)
             repository.save(wallet)
+            if let note = expense.note {
+                categoryStrategy.learn(note: note, category: expense.category)
+            }
             errorMessage = nil
             reload()
             return true

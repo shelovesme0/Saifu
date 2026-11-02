@@ -10,7 +10,15 @@ import SwiftUI
 @main
 struct SaifuApp: App {
     // Композиційний корінь: тут обирається репозиторій (InMemoryWalletRepository() — порожній старт)
-    @State private var viewModel = WalletViewModel(repository: DemoWalletRepository())
+    @State private var viewModel = WalletViewModel(
+        repository: DemoWalletRepository(),
+        categoryStrategy: ChainedCategoryStrategy([
+            LastUsedCategoryStrategy(),
+            KeywordCategoryStrategy(
+                dictionary: CategoryDictionaries.english.merging(CategoryDictionaries.ukrainian) { first, _ in first }
+            )
+        ])
+    )
 
     var body: some Scene {
         WindowGroup {
