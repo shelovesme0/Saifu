@@ -75,9 +75,12 @@ struct WalletView: View {
 #Preview {
     WalletView(viewModel: WalletViewModel(
         repository: DemoWalletRepository(),
-        categoryStrategy: KeywordCategoryStrategy(
-            dictionary: CategoryDictionaries.english.merging(CategoryDictionaries.ukrainian) { first, _ in first }
-        ),
+        categoryStrategy: ChainedCategoryStrategy([
+            LastUsedCategoryStrategy(),
+            KeywordCategoryStrategy(
+                dictionary: CategoryDictionaries.english.merging(CategoryDictionaries.ukrainian) { first, _ in first }
+            )
+        ]),
         rateProvider: NBURateAdapter(source: DemoNBURecordSource())
     ))
 }
