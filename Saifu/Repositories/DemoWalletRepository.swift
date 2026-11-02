@@ -4,9 +4,9 @@ import Foundation
 final class DemoWalletRepository: WalletRepository {
     private let inner: InMemoryWalletRepository
 
-    init() {
-        // Дані беремо з консольного сценарію, щоб не дублювати логіку
-        inner = InMemoryWalletRepository(wallets: DemoScenario.run())
+    /// За замовчуванням дані беремо з консольного сценарію, щоб не дублювати логіку.
+    init(wallets: [CashWallet] = DemoScenario.run()) {
+        inner = InMemoryWalletRepository(wallets: wallets)
     }
 
     func wallets() -> [CashWallet] {

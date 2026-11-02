@@ -23,4 +23,10 @@ enum CategoryDictionaries {
         "метро": .transport,
         "таксі": .transport
     ]
+
+    /// Усі словники разом; новий словник додається сюди одним рядком.
+    static let all: [String: ExpenseCategory] = [english, ukrainian]
+        .reduce(into: [:]) { result, dictionary in
+            result.merge(dictionary) { first, _ in first }
+        }
 }

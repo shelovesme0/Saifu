@@ -1,15 +1,6 @@
 import Foundation
 import Observation
 
-/// Рядок списку операцій, уже готовий для показу.
-struct EntryRow: Identifiable {
-    let id: UUID
-    let title: String
-    let subtitle: String?
-    let amountText: String
-    let isNegative: Bool
-}
-
 @MainActor
 @Observable
 final class WalletViewModel {
@@ -18,7 +9,7 @@ final class WalletViewModel {
     private let rateProvider: any ExchangeRateProvider
     private var rateTask: Task<Void, Never>?
 
-    private(set) var wallets: [CashWallet] = []
+    private var wallets: [CashWallet] = []
     var selectedIndex = 0 {
         didSet { reload() }
     }
@@ -42,7 +33,7 @@ final class WalletViewModel {
         wallets.map(\.name)
     }
 
-    var selectedWallet: CashWallet? {
+    private var selectedWallet: CashWallet? {
         wallets.indices.contains(selectedIndex) ? wallets[selectedIndex] : nil
     }
 
@@ -92,20 +83,8 @@ final class WalletViewModel {
         }
         balanceText = wallet.formattedBalance
         updateConvertedBalance(for: wallet)
-        let topUpRows = wallet.topUps.map { topUp in
-            EntryRow(id: topUp.id,
-                     title: topUp.source == .atm ? "🏧 Поповнення" : "➕ Коригування",
-                     subtitle: nil,
-                     amountText: wallet.currency.format(topUp.signedAmount),
-                     isNegative: topUp.signedAmount < 0)
-        }
-        let expenseRows = wallet.expenses.map { expense in
-            EntryRow(id: expense.id,
-                     title: "\(expense.category.emoji) \(expense.category.title)",
-                     subtitle: expense.note,
-                     amountText: wallet.currency.format(expense.signedAmount),
-                     isNegative: expense.signedAmount < 0)
-        }
+        let topUpRows = wallet.topUps.map { EntryRow(topUp: $0, currency: wallet.currency) }
+        let expenseRows = wallet.expenses.map { EntryRow(expense: $0, currency: wallet.currency) }
         rows = topUpRows + expenseRows
     }
 
