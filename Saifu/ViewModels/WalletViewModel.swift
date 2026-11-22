@@ -1,10 +1,19 @@
 import Foundation
 import Observation
 
+/// Вкладка перемикача гаманців.
+struct WalletTab: Identifiable {
+    let id: UUID
+    let title: String
+}
+
 /// Головний екран. Стан обчислюється з @Observable CashWallet, тому оновлюється сам після змін на інших екранах.
 @MainActor
 @Observable
 final class WalletViewModel {
+    /// Скільки останніх операцій показувати на головному екрані.
+    private static let recentLimit = 5
+
     private let rateProvider: any ExchangeRateProvider
     private let router: AppRouter
     private var rateTask: Task<Void, Never>?
@@ -12,7 +21,7 @@ final class WalletViewModel {
     private var rate: ExchangeRate?
 
     private let wallets: [CashWallet]
-    var selectedIndex = 0 {
+    var selectedWalletID: UUID? {
         didSet { loadRate() }
     }
 
@@ -22,15 +31,21 @@ final class WalletViewModel {
         self.rateProvider = rateProvider
         self.router = router
         wallets = repository.wallets()
+        selectedWalletID = wallets.first?.id
         loadRate()
     }
 
-    var walletNames: [String] {
-        wallets.map(\.name)
+    /// Перемикач показує код валюти: JPY / UAH.
+    var walletTabs: [WalletTab] {
+        wallets.map { WalletTab(id: $0.id, title: $0.currency.code) }
     }
 
     private var selectedWallet: CashWallet? {
-        wallets.indices.contains(selectedIndex) ? wallets[selectedIndex] : nil
+        wallets.first { $0.id == selectedWalletID }
+    }
+
+    var walletName: String {
+        selectedWallet?.name ?? ""
     }
 
     var balanceText: String {
@@ -44,11 +59,15 @@ final class WalletViewModel {
         return "≈ " + Currency.uah.format(rate.toUAHMinor(wallet.expectedBalance))
     }
 
-    var rows: [EntryRow] {
+    /// Останні операції (витрати й поповнення разом), нові зверху.
+    var recentRows: [EntryRow] {
         guard let wallet = selectedWallet else { return [] }
         let topUpRows = wallet.topUps.map { EntryRow(topUp: $0, currency: wallet.currency) }
         let expenseRows = wallet.expenses.map { EntryRow(expense: $0, currency: wallet.currency) }
-        return topUpRows + expenseRows
+        return (topUpRows + expenseRows)
+            .sorted { $0.date > $1.date }
+            .prefix(Self.recentLimit)
+            .map { $0 }
     }
 
     func addExpenseTapped() {

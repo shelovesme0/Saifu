@@ -1,47 +1,54 @@
 import SwiftUI
 
+/// Головний екран: перемикач гаманців, баланс, останні операції, дії.
 struct WalletView: View {
     @Bindable var viewModel: WalletViewModel
 
     var body: some View {
         List {
             Section {
-                Picker("Гаманець", selection: $viewModel.selectedIndex) {
-                    ForEach(viewModel.walletNames.indices, id: \.self) { index in
-                        Text(viewModel.walletNames[index]).tag(index)
+                Picker("Гаманець", selection: $viewModel.selectedWalletID) {
+                    ForEach(viewModel.walletTabs) { tab in
+                        Text(tab.title).tag(UUID?.some(tab.id))
                     }
                 }
                 .pickerStyle(.segmented)
-                Text(viewModel.balanceText)
-                    .font(.largeTitle)
-                if let converted = viewModel.convertedBalanceText {
-                    Text(converted)
+                .listRowSeparator(.hidden)
+
+                VStack(spacing: 4) {
+                    Text(viewModel.walletName)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Text(viewModel.balanceText)
+                        .font(.largeTitle.bold())
+                        .contentTransition(.numericText())
+                    if let converted = viewModel.convertedBalanceText {
+                        Text(converted)
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .animation(.default, value: viewModel.balanceText)
+                .animation(.default, value: viewModel.convertedBalanceText)
             }
 
             Section {
-                Button("+ Витрата") { viewModel.addExpenseTapped() }
+                Button("+ Витрата", systemImage: "plus.circle.fill") { viewModel.addExpenseTapped() }
             }
 
-            Section("Операції") {
-                ForEach(viewModel.rows) { row in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(row.title)
-                            if let subtitle = row.subtitle {
-                                Text(subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Text(row.amountText)
-                            .foregroundStyle(row.isNegative ? .red : .green)
-                    }
+            Section("Останні операції") {
+                if viewModel.recentRows.isEmpty {
+                    Text("Операцій ще немає")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(viewModel.recentRows) { row in
+                    EntryRowView(row: row)
                 }
             }
         }
+        .animation(.default, value: viewModel.recentRows)
         .navigationTitle("Saifu")
     }
 }
