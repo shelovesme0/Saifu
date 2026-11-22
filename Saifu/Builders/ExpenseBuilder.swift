@@ -1,12 +1,15 @@
 import Foundation
 
 /// Збирає `Expense` з рядка суми, категорії, нотатки та дати. Кожен метод повертає копію.
+/// Розбір суми — у `Currency.parseMinor`.
 struct ExpenseBuilder {
     private let currency: Currency
+    private var id = UUID()
     private var amountText = ""
     private var category: ExpenseCategory?
     private var note: String?
     private var date = Date()
+    private var receiptID: String?
 
     init(currency: Currency) {
         self.currency = currency
@@ -36,32 +39,30 @@ struct ExpenseBuilder {
         return copy
     }
 
+    /// Для редагування: зберегти id наявної витрати.
+    func id(_ id: UUID) -> ExpenseBuilder {
+        var copy = self
+        copy.id = id
+        return copy
+    }
+
+    func receiptID(_ receiptID: String?) -> ExpenseBuilder {
+        var copy = self
+        copy.receiptID = receiptID
+        return copy
+    }
+
     func build() throws -> Expense {
-        let amount = try parseAmount()
+        let amount = try currency.parseMinor(amountText)
         guard amount > 0 else { throw WalletError.negativeAmount }
         guard let category else { throw WalletError.missingCategory }
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespaces)
-        return Expense(amount: amount,
+        return Expense(id: id,
+                       amount: amount,
                        category: category,
                        date: date,
-                       note: trimmedNote?.isEmpty == false ? trimmedNote : nil)
-    }
-
-    /// "45,50" або "45.50" → 4550 (без Double).
-    private func parseAmount() throws -> Int {
-        let normalized = amountText.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
-        let parts = normalized.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count <= 2, let whole = Int(parts[0]) else { throw WalletError.invalidAmount }
-
-        var fractionDigits = parts.count == 2 ? String(parts[1]) : ""
-        guard fractionDigits.count <= currency.minorUnits,
-              fractionDigits.allSatisfy(\.isNumber) else { throw WalletError.invalidAmount }
-        // Доповнюємо нулями справа: "5" при 2 знаках → "50"
-        fractionDigits += String(repeating: "0", count: currency.minorUnits - fractionDigits.count)
-
-        var divisor = 1
-        for _ in 0..<currency.minorUnits { divisor *= 10 }
-        return whole * divisor + (Int(fractionDigits) ?? 0)
+                       note: trimmedNote?.isEmpty == false ? trimmedNote : nil,
+                       receiptID: receiptID)
     }
 }

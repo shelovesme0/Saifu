@@ -7,4 +7,6 @@ enum WalletError: Error {
     case invalidAmount
     /// Категорію витрати не задано.
     case missingCategory
+    /// Витрату з таким id у гаманці не знайдено.
+    case expenseNotFound
 }

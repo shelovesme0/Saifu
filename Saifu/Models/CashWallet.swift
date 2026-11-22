@@ -1,7 +1,11 @@
 import Foundation
+import Observation
 
 /// Гаманець в одній валюті. Баланс рахується з поповнень і витрат.
-final class CashWallet {
+/// @Observable: усі екрани, що читають гаманець, оновлюються після змін.
+@Observable
+final class CashWallet: Identifiable {
+    let id: UUID
     let name: String
     let currency: Currency
     private(set) var expenses: [Expense] = []
@@ -9,7 +13,8 @@ final class CashWallet {
     /// nil, поки гаманець жодного разу не звіряли.
     var lastReconciliation: Reconciliation?
 
-    init(name: String, currency: Currency) {
+    init(id: UUID = UUID(), name: String, currency: Currency) {
+        self.id = id
         self.name = name
         self.currency = currency
     }
@@ -25,6 +30,22 @@ final class CashWallet {
     func addExpense(_ expense: Expense) throws {
         guard expense.amount > 0 else { throw WalletError.negativeAmount }
         expenses.append(expense)
+    }
+
+    /// Замінює витрату з тим самим id. Ті самі перевірки, що й при додаванні.
+    func updateExpense(_ expense: Expense) throws {
+        guard expense.amount > 0 else { throw WalletError.negativeAmount }
+        guard let index = expenses.firstIndex(where: { $0.id == expense.id }) else {
+            throw WalletError.expenseNotFound
+        }
+        expenses[index] = expense
+    }
+
+    func removeExpense(id: Expense.ID) throws {
+        guard let index = expenses.firstIndex(where: { $0.id == id }) else {
+            throw WalletError.expenseNotFound
+        }
+        expenses.remove(at: index)
     }
 
     /// Пошук витрати за id; повертає nil, якщо не знайдено.

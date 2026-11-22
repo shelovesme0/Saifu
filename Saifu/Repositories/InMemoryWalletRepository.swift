@@ -13,7 +13,7 @@ final class InMemoryWalletRepository: WalletRepository {
     }
 
     func save(_ wallet: CashWallet) {
-        if let index = storage.firstIndex(where: { $0.name == wallet.name }) {
+        if let index = storage.firstIndex(where: { $0.id == wallet.id }) {
             storage[index] = wallet
         } else {
             storage.append(wallet)
