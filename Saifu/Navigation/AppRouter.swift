@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+/// Екрани в стеку NavigationStack.
+enum Route: Hashable {
+    case expenseList(walletID: UUID)
+}
+
 /// Модальні екрани (sheet).
 enum Sheet: Identifiable, Hashable {
     case addExpense(walletID: UUID)
@@ -13,7 +18,12 @@ enum Sheet: Identifiable, Hashable {
 @MainActor
 @Observable
 final class AppRouter {
+    var path: [Route] = []
     var sheet: Sheet?
+
+    func showExpenseList(walletID: UUID) {
+        path.append(.expenseList(walletID: walletID))
+    }
 
     func presentAddExpense(walletID: UUID) {
         sheet = .addExpense(walletID: walletID)

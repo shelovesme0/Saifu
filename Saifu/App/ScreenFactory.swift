@@ -20,6 +20,18 @@ final class ScreenFactory {
     }
 
     @ViewBuilder
+    func view(for route: Route) -> some View {
+        switch route {
+        case .expenseList(let walletID):
+            ExpenseListView(viewModel: ExpenseListViewModel(
+                walletID: walletID,
+                repository: repository,
+                router: router
+            ))
+        }
+    }
+
+    @ViewBuilder
     func view(for sheet: Sheet) -> some View {
         switch sheet {
         case .addExpense(let walletID):

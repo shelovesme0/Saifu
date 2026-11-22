@@ -11,8 +11,11 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $router.path) {
             WalletView(viewModel: factory.walletViewModel)
+                .navigationDestination(for: Route.self) { route in
+                    factory.view(for: route)
+                }
         }
         .sheet(item: $router.sheet) { sheet in
             factory.view(for: sheet)
