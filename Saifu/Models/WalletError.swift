@@ -9,4 +9,6 @@ enum WalletError: Error {
     case missingCategory
     /// Витрату з таким id у гаманці не знайдено.
     case expenseNotFound
+    /// Дію (зміну валюти) можна виконати лише для гаманця без записів.
+    case walletNotEmpty
 }

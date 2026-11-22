@@ -16,4 +16,16 @@ struct ExchangeRate {
         NSDecimalRound(&rounded, &value, 0, .plain)
         return NSDecimalNumber(decimal: rounded).intValue
     }
+
+    /// Зворотне перетворення: копійки → найменші одиниці `currency`; без Double.
+    func fromUAHMinor(_ uahMinor: Int) -> Int {
+        guard toUAH > 0 else { return 0 }
+        var value = Decimal(uahMinor) / toUAH
+        value *= pow(10, currency.minorUnits)
+        value /= pow(10, Currency.uah.minorUnits)
+
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &value, 0, .plain)
+        return NSDecimalNumber(decimal: rounded).intValue
+    }
 }

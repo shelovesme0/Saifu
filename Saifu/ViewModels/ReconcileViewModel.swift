@@ -24,7 +24,12 @@ final class ReconcileViewModel {
     }
 
     var walletTitle: String {
-        wallet?.name ?? ""
+        guard let wallet else { return "" }
+        return "\(wallet.name) · \(wallet.currency.code)"
+    }
+
+    var currency: Currency {
+        wallet?.currency ?? .uah
     }
 
     var expectedText: String {
@@ -55,7 +60,18 @@ final class ReconcileViewModel {
         switch outcome {
         case .shortage: return "Недостача \(amount) буде записана як «\(ExpenseCategory.untracked.title)»"
         case .surplus: return "Надлишок \(amount) буде записаний як коригувальне поповнення"
-        case .match: return "Баланс збігся"
+        case .match: return "Баланс збігся, нічого не буде записано"
+        }
+    }
+
+    /// Короткий текст бейджа: "Сходиться", "Недостача 500 ¥", "Надлишок 200 ¥".
+    var badgeTitle: String? {
+        guard let wallet, let difference = preview?.difference, let outcome else { return nil }
+        let amount = wallet.currency.format(abs(difference))
+        switch outcome {
+        case .shortage: return "Недостача \(amount)"
+        case .surplus: return "Надлишок \(amount)"
+        case .match: return "Сходиться"
         }
     }
 

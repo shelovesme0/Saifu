@@ -8,6 +8,7 @@ extension WalletError {
         case .invalidAmount: return "Некоректна сума"
         case .missingCategory: return "Оберіть категорію"
         case .expenseNotFound: return "Витрату не знайдено"
+        case .walletNotEmpty: return "Валюту можна змінити лише в гаманці без записів"
         }
     }
 

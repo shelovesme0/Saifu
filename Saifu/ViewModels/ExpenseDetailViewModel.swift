@@ -38,12 +38,22 @@ final class ExpenseDetailViewModel {
         expense == nil
     }
 
-    var currencySymbol: String {
-        wallet?.currency.symbol ?? ""
+    var currency: Currency {
+        wallet?.currency ?? .uah
+    }
+
+    var walletTitle: String {
+        guard let wallet else { return "" }
+        return "\(wallet.name) · \(wallet.currency.code)"
     }
 
     var dateText: String {
-        expense?.date.formatted(date: .abbreviated, time: .shortened) ?? ""
+        expense?.date.formatted(.dateTime.day().month(.wide).year().hour().minute()
+            .locale(Locale(identifier: "uk_UA"))) ?? ""
+    }
+
+    func backTapped() {
+        router.pop()
     }
 
     /// Та сама валідація, що й при додаванні: ExpenseBuilder з id наявної витрати.

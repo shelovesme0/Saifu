@@ -4,20 +4,84 @@ import SwiftUI
 @MainActor
 final class ScreenFactory {
     let router: AppRouter
-    /// Головний екран живе весь час роботи застосунку, тому його ViewModel одна.
+    /// Кореневі екрани вкладок живуть весь час роботи застосунку, тому їхні ViewModel по одній.
     let walletViewModel: WalletViewModel
+    let analyticsViewModel: AnalyticsViewModel
+    let settingsViewModel: SettingsViewModel
     private let repository: WalletRepository
-    private let categoryStrategy: any CategorySuggestionStrategy
 
     init(repository: WalletRepository,
          categoryStrategy: any CategorySuggestionStrategy,
          rateProvider: any ExchangeRateProvider,
+         reminderScheduler: any ReminderScheduling,
+         defaults: UserDefaults,
+         appVersion: String,
          router: AppRouter) {
         self.repository = repository
-        self.categoryStrategy = categoryStrategy
         self.router = router
-        walletViewModel = WalletViewModel(repository: repository, rateProvider: rateProvider, router: router)
+        // Спільні для кількох екранів: домашня валюта і перерахунок курсів
+        let settings = AppSettings(defaults: defaults)
+        let converter = CurrencyConverter(rateProvider: rateProvider)
+        walletViewModel = WalletViewModel(
+            repository: repository,
+            converter: converter,
+            settings: settings,
+            router: router,
+            makeAddExpenseViewModel: { walletID in
+                AddExpenseViewModel(walletID: walletID, repository: repository, categoryStrategy: categoryStrategy)
+            }
+        )
+        analyticsViewModel = AnalyticsViewModel(
+            repository: repository,
+            converter: converter,
+            settings: settings,
+            router: router
+        )
+        settingsViewModel = SettingsViewModel(
+            settings: settings,
+            router: router,
+            scheduler: reminderScheduler,
+            defaults: defaults,
+            appVersion: appVersion
+        )
     }
+
+    /// Дії при запуску застосунку (переплановування нагадувань).
+    func appDidLaunch() async {
+        await settingsViewModel.appDidLaunch()
+    }
+
+    // MARK: - Кореневі екрани вкладок
+
+    func homeView() -> some View {
+        WalletView(viewModel: walletViewModel)
+    }
+
+    func analyticsView() -> some View {
+        AnalyticsView(viewModel: analyticsViewModel)
+    }
+
+    func settingsView() -> some View {
+        SettingsView(viewModel: settingsViewModel)
+    }
+
+    // MARK: - Sheet «Гаманці»
+
+    func walletsView() -> some View {
+        WalletsView(viewModel: WalletsViewModel(repository: repository, router: router))
+    }
+
+    @ViewBuilder
+    func view(for route: WalletsRoute) -> some View {
+        switch route {
+        case .addWallet:
+            WalletFormView(viewModel: WalletFormViewModel(walletID: nil, repository: repository, router: router))
+        case .editWallet(let walletID):
+            WalletFormView(viewModel: WalletFormViewModel(walletID: walletID, repository: repository, router: router))
+        }
+    }
+
+    // MARK: - Маршрути й sheet
 
     @ViewBuilder
     func view(for route: Route) -> some View {
@@ -41,26 +105,24 @@ final class ScreenFactory {
     @ViewBuilder
     func view(for sheet: Sheet) -> some View {
         switch sheet {
-        case .addExpense(let walletID):
-            AddExpenseView(viewModel: AddExpenseViewModel(
-                walletID: walletID,
-                repository: repository,
-                categoryStrategy: categoryStrategy,
-                router: router
-            ))
         case .reconcile(let walletID):
             ReconcileView(viewModel: ReconcileViewModel(
                 walletID: walletID,
                 repository: repository,
                 router: router
             ))
+        case .wallets:
+            WalletsSheet(factory: self)
+        case .analyticsPeriod:
+            // Та сама ViewModel, що й в аналітиці: sheet редагує її чернетку періоду
+            AnalyticsPeriodView(viewModel: analyticsViewModel)
         }
     }
 }
 
 #if DEBUG
 extension ScreenFactory {
-    /// Залежності для #Preview (ті самі демо-дані, що й у застосунку).
+    /// Залежності для #Preview (ті самі демо-дані, що й у застосунку; нагадування не плануються).
     static func preview() -> ScreenFactory {
         ScreenFactory(
             repository: DemoWalletRepository(),
@@ -69,6 +131,9 @@ extension ScreenFactory {
                 KeywordCategoryStrategy(dictionary: CategoryDictionaries.all)
             ]),
             rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
+            reminderScheduler: PreviewReminderScheduler(),
+            defaults: UserDefaults(suiteName: "saifu.preview") ?? .standard,
+            appVersion: "1.0 (preview)",
             router: AppRouter()
         )
     }

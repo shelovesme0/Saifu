@@ -16,4 +16,12 @@ final class DemoWalletRepository: WalletRepository {
     func save(_ wallet: CashWallet) {
         inner.save(wallet)
     }
+
+    func remove(id: CashWallet.ID) {
+        inner.remove(id: id)
+    }
+
+    func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        inner.move(fromOffsets: source, toOffset: destination)
+    }
 }

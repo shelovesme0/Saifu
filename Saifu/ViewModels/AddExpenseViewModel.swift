@@ -1,14 +1,13 @@
 import Foundation
 import Observation
 
-/// Форма нової витрати (sheet). Працює з тим самим екземпляром гаманця, що й інші екрани.
+/// Форма швидкого додавання витрати на головному екрані. Працює з тим самим екземпляром гаманця, що й інші екрани.
 @MainActor
 @Observable
 final class AddExpenseViewModel {
     private let wallet: CashWallet?
     private let repository: WalletRepository
     private let categoryStrategy: any CategorySuggestionStrategy
-    private let router: AppRouter
 
     var amountText = ""
     var category: ExpenseCategory?
@@ -21,24 +20,28 @@ final class AddExpenseViewModel {
 
     init(walletID: UUID,
          repository: WalletRepository,
-         categoryStrategy: any CategorySuggestionStrategy,
-         router: AppRouter) {
+         categoryStrategy: any CategorySuggestionStrategy) {
         self.repository = repository
         self.categoryStrategy = categoryStrategy
-        self.router = router
         wallet = repository.wallet(id: walletID)
     }
 
-    var walletTitle: String {
-        guard let wallet else { return "" }
-        return "\(wallet.name) · \(wallet.currency.symbol)"
+    var currency: Currency {
+        wallet?.currency ?? .uah
     }
 
-    /// View → ViewModel → ExpenseBuilder → CashWallet → Repository → закриття sheet.
-    func save() {
+    /// Кнопку «+» вмикаємо, щойно введено суму.
+    var canSave: Bool {
+        !amountText.isEmpty
+    }
+
+    /// View → ViewModel → ExpenseBuilder → CashWallet → Repository → очищення форми.
+    /// Повертає true, якщо витрату додано.
+    @discardableResult
+    func save() -> Bool {
         guard let wallet else {
             errorMessage = "Гаманець не знайдено"
-            return
+            return false
         }
         do {
             let expense = try ExpenseBuilder(currency: wallet.currency)
@@ -51,15 +54,20 @@ final class AddExpenseViewModel {
             if let note = expense.note {
                 categoryStrategy.learn(note: note, category: expense.category)
             }
-            errorMessage = nil
-            router.dismissSheet()
+            reset()
+            return true
         } catch {
             errorMessage = WalletError.message(for: error, fallback: "Не вдалося додати витрату")
+            return false
         }
     }
 
-    func cancel() {
-        router.dismissSheet()
+    private func reset() {
+        amountText = ""
+        note = ""
+        category = nil
+        suggestedCategory = nil
+        errorMessage = nil
     }
 
     private func applySuggestion() {
