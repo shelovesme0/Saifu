@@ -5,6 +5,8 @@ struct WalletsView: View {
     @State private var viewModel: WalletsViewModel
     /// Гаманець, який чекає підтвердження видалення.
     @State private var walletPendingDelete: WalletSummary?
+    /// Режим перетягування; власна кнопка замість EditButton, бо та показує системний текст англійською.
+    @State private var editMode: EditMode = .inactive
 
     init(viewModel: WalletsViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -45,6 +47,7 @@ struct WalletsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .environment(\.editMode, $editMode)
         .scrollContentBackground(.hidden)
         .background(Theme.background.ignoresSafeArea())
         .font(Theme.bodyFont)
@@ -54,10 +57,14 @@ struct WalletsView: View {
         .toolbarBackground(Theme.background, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                EditButton()
+                Button(editMode.isEditing ? "Готово" : "Змінити") {
+                    withAnimation(.snappy) {
+                        editMode = editMode.isEditing ? .inactive : .active
+                    }
+                }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Готово") { viewModel.doneTapped() }
+                Button("Закрити") { viewModel.doneTapped() }
                     .fontWeight(.semibold)
             }
         }

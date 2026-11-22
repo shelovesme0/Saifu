@@ -194,9 +194,9 @@ final class AnalyticsViewModel {
         selectedWallet?.currency.format(total) ?? ""
     }
 
-    /// Підпис над «≈ …»: "У гривнях (UAH)" тощо.
+    /// Підпис над «≈ …» — коротко, щоб уміщався поруч із діаграмою на вузьких екранах: "У UAH".
     var convertedCaption: String {
-        "У домашній валюті · \(settings.homeCurrency.code)"
+        "У \(settings.homeCurrency.code)"
     }
 
     /// "≈ …" у домашній валюті; nil, якщо валюта гаманця збігається з домашньою або курсу ще немає.

@@ -116,9 +116,13 @@ struct AnalyticsView: View {
                         Text("Найбільше")
                             .font(Theme.captionFont)
                             .foregroundStyle(Theme.secondaryText)
+                        // Назва не ламається посеред слова: до 2 рядків по словах, за потреби менший шрифт
                         Label(top.category.title, systemImage: top.category.symbolName)
                             .font(Theme.font(.subheadline, weight: .semibold))
                             .foregroundStyle(top.category.color)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text("\(top.amountText) · \(top.percentText)")
                             .font(Theme.captionFont)
                             .foregroundStyle(Theme.text)
