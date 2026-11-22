@@ -1,7 +1,7 @@
 # Архітектура Saifu
 
 Практична робота 2: MVVM, патерни Builder / Strategy / Adapter, принципи SOLID.
-Практична робота 3: екрани у трьох вкладках, навігація через `AppRouter`, спільний стан між екранами, темний дизайн (`Theme`).
+Практична робота 3: екрани у трьох вкладках (`TabView`), навігація через `AppRouter`, спільний стан між екранами, темний дизайн (`Theme`). Карта переходів, анімації та сценарій проходження: [navigation.md](navigation.md).
 
 ## Чому MVVM
 
@@ -161,28 +161,32 @@ View не знають про репозиторій, стратегію, кур
 - `EntryRow` лише готує рядок для показу.
 - `AppRouter` лише зберігає стан навігації, а `ScreenFactory` лише збирає екрани.
 - У лабі 3 `WalletViewModel` розбито: форма перейшла в `AddExpenseViewModel`, звірка в `ReconcileViewModel`, список і деталі мають власні ViewModel. Тексти помилок зібрано в одному місці, `WalletError+Message.swift`.
+- Керування гаманцями винесено з налаштувань в окремі `WalletsViewModel` (список, видалення, порядок) і `WalletFormViewModel` (додавання й редагування). `SettingsViewModel` більше не знає про репозиторій: він лише відкриває sheet через роутер і керує домашньою валютою та нагадуваннями.
+- `LocalReminderScheduler` лише планує й скасовує локальні сповіщення; коли й скільки нагадувань ставити, вирішує тільки він, а не ViewModel.
+  - Нагадування приходять у вибраний час (за замовчуванням 20:00). «Щодня» і «щотижня» — повторюваний `UNCalendarNotificationTrigger` (щотижня — у день тижня, коли ввімкнули). «Раз на 3 дні» календарний тригер виразити не може, тому планується серія з 10 одноразових нагадувань наперед; вона поновлюється при кожному запуску (`RootView.task` → `ScreenFactory.appDidLaunch`) і при зміні часу чи інтервалу. День тижня й ритм серії планувальник бере з уже запланованих запитів, тож окремо їх не зберігає.
+- `AppSettings` лише зберігає домашню валюту, `CurrencyConverter` лише перераховує суми.
 
 **O: відкритість до розширення.**
 - Новий словник додається у `CategoryDictionaries` одним `static let`, класи стратегій не змінюються.
 - Нова стратегія додається в `ChainedCategoryStrategy([...])` у `SaifuApp`.
-- Новий екран означає новий випадок `Route`/`Sheet`, метод роутера та гілку в `ScreenFactory`. Наявні екрани не змінюються.
+- Новий екран означає новий випадок `Route`/`Sheet` (або `WalletsRoute` для sheet «Гаманці»), метод роутера та гілку в `ScreenFactory`. Наявні екрани не змінюються.
+- Новий інтервал нагадувань — кейс `ReminderInterval` і гілка в `LocalReminderScheduler`; `SettingsViewModel` не змінюється.
 
 **L: підстановка Лісков.**
-- Будь-яка реалізація `WalletRepository`, `CategorySuggestionStrategy` чи `ExchangeRateProvider` замінює іншу без змін у ViewModel.
-- Наприклад, `InMemoryWalletRepository` і `DemoWalletRepository` взаємозамінні, а `ChainedCategoryStrategy` сама є стратегією.
+- Будь-яка реалізація `WalletRepository`, `CategorySuggestionStrategy`, `ExchangeRateProvider` чи `ReminderScheduling` замінює іншу без змін у ViewModel.
+- Наприклад, `InMemoryWalletRepository` і `DemoWalletRepository` взаємозамінні, `ChainedCategoryStrategy` сама є стратегією, а `PreviewReminderScheduler` підміняє `LocalReminderScheduler` у `#Preview`.
 - Спадкування тут не використовується, тому принцип виявляється лише через протоколи.
-
-- `LocalReminderScheduler` лише планує й скасовує локальні сповіщення; `SettingsViewModel` лише керує станом налаштувань.
-  - Нагадування приходять у вибраний час (за замовчуванням 20:00). «Щодня» і «щотижня» — повторюваний `UNCalendarNotificationTrigger` (щотижня — у день тижня, коли ввімкнули). «Раз на 3 дні» календарний тригер виразити не може, тому планується серія з 10 одноразових нагадувань наперед; вона поновлюється при кожному запуску (`RootView.task` → `ScreenFactory.appDidLaunch`) і при зміні часу чи інтервалу. День тижня й ритм серії планувальник бере з уже запланованих запитів, тож окремо їх не зберігає.
 
 **I: розділення інтерфейсів.**
 - `NBURecordSource` має один метод, `ExchangeRateProvider` також один.
+- `ReminderScheduling` має три методи (дозвіл, планування, скасування), і всі потрібні `SettingsViewModel`.
 - `learn(note:category:)` має стандартну порожню реалізацію, тому `KeywordCategoryStrategy` не змушений реалізовувати непотрібне.
-- Чесне застереження: `WalletRepository` має два методи. Пошук `wallet(id:)` додано стандартною реалізацією в extension, тож реалізації протоколу його не пишуть. Ділити протокол поки не потрібно.
+- Чесне застереження: `WalletRepository` виріс до чотирьох методів (`wallets`, `save`, `remove`, `move`), а пошук `wallet(id:)` додано стандартною реалізацією в extension. Екрани витрат користуються лише читанням, а `WalletsViewModel` — усім набором. Ділити протокол на «читання» і «керування» поки не варто: реалізації дві, і обидві підтримують усе.
 
 **D: інверсія залежностей.**
-- ViewModel залежать від протоколів `WalletRepository`, `CategorySuggestionStrategy`, `ExchangeRateProvider`, `ReminderScheduling` і отримують їх через `init` від `ScreenFactory`. `UNUserNotificationCenter` і `UserDefaults` створюються лише в `SaifuApp`; для `#Preview` підставляються `PreviewReminderScheduler` і окремий `UserDefaults(suiteName:)`. Конкретні типи створюються лише у `SaifuApp`.
-- Чесне застереження: ViewModel напряму використовують `CashWallet`, `ExpenseBuilder` і `AppRouter`. У кожного з них єдина реалізація, тож абстракція над ними була б штучною.
+- ViewModel залежать від протоколів `WalletRepository`, `CategorySuggestionStrategy`, `ExchangeRateProvider`, `ReminderScheduling` і отримують їх через `init` від `ScreenFactory`. Конкретні реалізації протоколів, `UNUserNotificationCenter` і `UserDefaults` створюються лише в `SaifuApp`; для `#Preview` підставляються `PreviewReminderScheduler` і окремий `UserDefaults(suiteName:)`.
+- `AppSettings` і `CurrencyConverter` створює `ScreenFactory` з уже переданих `UserDefaults` і `ExchangeRateProvider`: це спільний стан кількох екранів, а не нова зовнішня залежність.
+- Чесне застереження: ViewModel напряму використовують `CashWallet`, `ExpenseBuilder`, `AppRouter`, `AppSettings` і `CurrencyConverter`. У кожного з них єдина реалізація, тож абстракція над ними була б штучною.
 
 ## Як замінити джерела без зміни ViewModel
 
