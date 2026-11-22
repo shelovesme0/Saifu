@@ -6,8 +6,10 @@ import Observation
 @Observable
 final class CashWallet: Identifiable {
     let id: UUID
-    let name: String
-    let currency: Currency
+    /// Назву можна змінити будь-коли.
+    var name: String
+    /// Валюту можна змінити лише в порожньому гаманці (`changeCurrency`).
+    private(set) var currency: Currency
     private(set) var expenses: [Expense] = []
     private(set) var topUps: [CashTopUp] = []
     /// nil, поки гаманець жодного разу не звіряли.
@@ -17,6 +19,18 @@ final class CashWallet: Identifiable {
         self.id = id
         self.name = name
         self.currency = currency
+    }
+
+    /// Чи немає в гаманці жодного запису (витрат і поповнень).
+    var hasNoEntries: Bool {
+        expenses.isEmpty && topUps.isEmpty
+    }
+
+    /// Змінює валюту; суми записів не перераховуються, тому лише для порожнього гаманця.
+    func changeCurrency(to newCurrency: Currency) throws {
+        guard newCurrency != currency else { return }
+        guard hasNoEntries else { throw WalletError.walletNotEmpty }
+        currency = newCurrency
     }
 
     // MARK: - Додавання записів
@@ -76,9 +90,10 @@ final class CashWallet: Identifiable {
     }
 
     /// for-in: сума витрат за кожною категорією. Категорії без витрат у результат не потрапляють.
-    func totalsByCategory() -> [ExpenseCategory: Int] {
+    /// `range` обмежує витрати датами (для аналітики за період); nil — усі витрати.
+    func totalsByCategory(in range: Range<Date>? = nil) -> [ExpenseCategory: Int] {
         var totals: [ExpenseCategory: Int] = [:]
-        for expense in expenses {
+        for expense in expenses where range?.contains(expense.date) ?? true {
             // ?? дає 0, якщо категорії ще немає у словнику
             totals[expense.category] = (totals[expense.category] ?? 0) + expense.amount
         }
