@@ -4,6 +4,7 @@ import Foundation
 enum CategoryDictionaries {
     static let english: [String: ExpenseCategory] = [
         "7-Eleven": .smallShop,
+        "ATB": .groceries,
         "Lawson": .smallShop,
         "FamilyMart": .smallShop,
         "ICOCA": .transport,
