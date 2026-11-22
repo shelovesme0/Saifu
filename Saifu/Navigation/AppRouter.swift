@@ -4,6 +4,7 @@ import Observation
 /// Екрани в стеку NavigationStack.
 enum Route: Hashable {
     case expenseList(walletID: UUID)
+    case expenseDetail(walletID: UUID, expenseID: UUID)
 }
 
 /// Модальні екрани (sheet).
@@ -23,6 +24,16 @@ final class AppRouter {
 
     func showExpenseList(walletID: UUID) {
         path.append(.expenseList(walletID: walletID))
+    }
+
+    func showExpenseDetail(walletID: UUID, expenseID: UUID) {
+        path.append(.expenseDetail(walletID: walletID, expenseID: expenseID))
+    }
+
+    /// Повернення на попередній екран стеку (після збереження чи видалення).
+    func pop() {
+        guard !path.isEmpty else { return }
+        path.removeLast()
     }
 
     func presentAddExpense(walletID: UUID) {

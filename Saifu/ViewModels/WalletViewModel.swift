@@ -80,6 +80,12 @@ final class WalletViewModel {
         router.presentReconcile(walletID: wallet.id)
     }
 
+    /// Тап по рядку: витрата відкриває деталі, поповнення нікуди не веде.
+    func rowTapped(_ row: EntryRow) {
+        guard let wallet = selectedWallet, let expenseID = row.expenseID else { return }
+        router.showExpenseDetail(walletID: wallet.id, expenseID: expenseID)
+    }
+
     func allExpensesTapped() {
         guard let wallet = selectedWallet else { return }
         router.showExpenseList(walletID: wallet.id)

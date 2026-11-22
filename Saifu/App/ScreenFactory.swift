@@ -28,6 +28,13 @@ final class ScreenFactory {
                 repository: repository,
                 router: router
             ))
+        case .expenseDetail(let walletID, let expenseID):
+            ExpenseDetailView(viewModel: ExpenseDetailViewModel(
+                walletID: walletID,
+                expenseID: expenseID,
+                repository: repository,
+                router: router
+            ))
         }
     }
 
@@ -69,6 +76,11 @@ extension ScreenFactory {
     /// Перший гаманець для превʼю екранів, які отримують ID.
     var previewWalletID: UUID {
         repository.wallets()[0].id
+    }
+
+    /// Перша витрата першого гаманця для превʼю деталей.
+    var previewExpenseID: UUID {
+        repository.wallets()[0].expenses[0].id
     }
 }
 #endif

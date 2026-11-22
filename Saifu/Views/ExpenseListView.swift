@@ -24,7 +24,10 @@ struct ExpenseListView: View {
 
             Section {
                 ForEach(viewModel.rows) { row in
-                    EntryRowView(row: row)
+                    Button { viewModel.rowTapped(row) } label: {
+                        EntryRowView(row: row)
+                    }
+                    .tint(.primary)
                 }
             }
         }

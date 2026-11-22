@@ -46,7 +46,14 @@ struct WalletView: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(viewModel.recentRows) { row in
-                    EntryRowView(row: row)
+                    if row.expenseID != nil {
+                        Button { viewModel.rowTapped(row) } label: {
+                            EntryRowView(row: row)
+                        }
+                        .tint(.primary)
+                    } else {
+                        EntryRowView(row: row)
+                    }
                 }
             }
         }

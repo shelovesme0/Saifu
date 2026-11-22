@@ -38,6 +38,11 @@ final class ExpenseListViewModel {
         return filteredExpenses.map { EntryRow(expense: $0, currency: wallet.currency) }
     }
 
+    func rowTapped(_ row: EntryRow) {
+        guard let wallet, let expenseID = row.expenseID else { return }
+        router.showExpenseDetail(walletID: wallet.id, expenseID: expenseID)
+    }
+
     var totalText: String {
         guard let wallet else { return "" }
         return wallet.currency.format(filteredExpenses.reduce(0) { $0 + $1.amount })
