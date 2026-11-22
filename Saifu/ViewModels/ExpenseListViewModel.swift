@@ -21,9 +21,13 @@ final class ExpenseListViewModel {
     }
 
     /// Категорії, які є серед витрат, у сталому порядку allCases.
+    /// Обрана категорія лишається у списку, навіть якщо її витрати змінили чи видалили.
     var categoryOptions: [ExpenseCategory] {
         guard let wallet else { return [] }
-        let used = Set(wallet.expenses.map(\.category))
+        var used = Set(wallet.expenses.map(\.category))
+        if let selectedCategory {
+            used.insert(selectedCategory)
+        }
         return ExpenseCategory.allCases.filter { used.contains($0) }
     }
 
