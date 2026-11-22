@@ -1,7 +1,7 @@
 # Архітектура Saifu
 
 Практична робота 2: MVVM, патерни Builder / Strategy / Adapter, принципи SOLID.
-Практична робота 3: п'ять екранів, навігація через `AppRouter`, спільний стан між екранами.
+Практична робота 3: екрани у трьох вкладках, навігація через `AppRouter`, спільний стан між екранами, темний дизайн (`Theme`).
 
 ## Чому MVVM
 
@@ -17,10 +17,13 @@
 graph TD
     App["SaifuApp<br/>(композиційний корінь)"]
     Factory["ScreenFactory"]
-    Router["AppRouter<br/>(path, sheet)"]
-    Root["RootView<br/>(NavigationStack + sheet)"]
-    Views["WalletView · ExpenseListView · ExpenseDetailView<br/>AddExpenseView · ReconcileView"]
-    VMs["WalletViewModel · ExpenseListViewModel · ExpenseDetailViewModel<br/>AddExpenseViewModel · ReconcileViewModel"]
+    Router["AppRouter<br/>(вкладка, path для кожної, sheet)"]
+    Root["RootView<br/>(TabView: 3 × NavigationStack + sheet)"]
+    Views["WalletView · ExpenseListView · ExpenseDetailView · ReconcileView<br/>AnalyticsView · AnalyticsPeriodView · SettingsView<br/>WalletsView · WalletFormView"]
+    VMs["WalletViewModel · AddExpenseViewModel · ExpenseListViewModel<br/>ExpenseDetailViewModel · ReconcileViewModel<br/>AnalyticsViewModel · SettingsViewModel<br/>WalletsViewModel · WalletFormViewModel"]
+    Shared["AppSettings (домашня валюта)<br/>CurrencyConverter (крос-курс)"]
+    Remind["ReminderScheduling<br/>(protocol)"]
+    LocalRemind["LocalReminderScheduler"]
     Repo["WalletRepository<br/>(protocol)"]
     Strat["CategorySuggestionStrategy<br/>(protocol)"]
     Rate["ExchangeRateProvider<br/>(protocol)"]
@@ -48,6 +51,10 @@ graph TD
     VMs --> Strat
     VMs --> Rate
     VMs --> Builder
+    VMs --> Remind
+    VMs --> Shared
+    Shared --> Rate
+    LocalRemind -.реалізує.-> Remind
     VMs --> Wallet
     Builder --> Wallet
     Repo --> Wallet
@@ -64,26 +71,37 @@ graph TD
     DemoSrc -.реалізує.-> Source
 ```
 
-View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `DemoNBURecordSource`, `AppRouter`) створюються тільки в `SaifuApp`. `ScreenFactory` отримує їх через `init` і збирає з них екрани.
+View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `DemoNBURecordSource`, `LocalReminderScheduler`, `AppRouter`) створюються тільки в `SaifuApp`. `ScreenFactory` отримує їх через `init` і збирає з них екрани.
 
 ## Навігація: `AppRouter`
 
-- **Стан.** `Saifu/Navigation/AppRouter.swift`, `@Observable`. `path: [Route]` для `NavigationStack`, `sheet: Sheet?` для модальних екранів.
+- **Стан.** `Saifu/Navigation/AppRouter.swift`, `@Observable`. `selectedTab: AppTab` (Головна, Аналітика, Налаштування), окремий стек для кожної вкладки (`homePath`, `analyticsPath`, `settingsPath: [Route]`) і `sheet: Sheet?`.
 - **Маршрути.**
-  - `Route.expenseList(walletID:)`, `Route.expenseDetail(walletID:expenseID:)` (push).
-  - `Sheet.addExpense(walletID:)`, `Sheet.reconcile(walletID:)` (sheet).
+  - `Route.expenseList(walletID:)`, `Route.expenseDetail(walletID:expenseID:)` (push у стек «Головної»).
+  - `Sheet.reconcile(walletID:)`, `Sheet.wallets`, `Sheet.analyticsPeriod` (sheet).
+  - `WalletsRoute.addWallet`, `WalletsRoute.editWallet(walletID:)` — стек усередині sheet «Гаманці» (`walletsPath`).
   - Маршрути несуть лише ідентифікатори, а не копії моделей.
-- **Методи.** `showExpenseList`, `showExpenseDetail`, `presentAddExpense`, `presentReconcile`, `dismissSheet`, `pop`. Переходи відбуваються тільки через них.
-- **Хто викликає.** View викликає метод своєї ViewModel (наприклад, `addExpenseTapped()`), а ViewModel звертається до роутера. Так ViewModel вирішує, куди йти після операції: `dismissSheet()` після збереження, `pop()` після редагування чи видалення.
-- **Прив'язка до SwiftUI.** Лише `RootView` бере binding `$router.path` і `$router.sheet` та питає `ScreenFactory`, який екран показати для `Route` чи `Sheet`.
+- **Методи.** `showExpenseList`, `showExpenseDetail`, `pop` (зі стеку поточної вкладки), `presentReconcile`, `presentWallets`, `showAddWallet`, `showEditWallet`, `popWallets`, `presentAnalyticsPeriod`, `dismissSheet`. Переходи відбуваються тільки через них.
+- **Хто викликає.** Екран викликає метод своєї ViewModel (наприклад, `allExpensesTapped()`, `backTapped()`), а ViewModel звертається до роутера: `dismissSheet()` після звірки, `pop()` після редагування чи видалення. Вибір вкладки — binding `$router.selectedTab` для `TabView(selection:)`.
+- **Прив'язка до SwiftUI.** Лише `RootView` бере binding-и `$router.selectedTab`, `$router.homePath`, `$router.analyticsPath`, `$router.settingsPath` і `$router.sheet`; `WalletsSheet` так само прив'язує `$router.walletsPath`. Панель вкладок нативна: `TabView` з Tab API (iOS 18+, на iOS 17 — `.tabItem`). На iOS 26 система сама дає Liquid Glass і анімацію вибору, а `tabBarMinimizeBehavior(.onScrollDown)` згортає панель при прокручуванні; відступи під панель SwiftUI додає сам. Жест «назад» свайпом від краю повертає `UINavigationController+SwipeBack.swift`, бо на вкладених екранах системну панель навігації сховано.
 
 | Екран | Тип | Звідки відкривається |
 |---|---|---|
-| `WalletView` | корінь стеку | старт застосунку |
-| `AddExpenseView` | sheet | «+ Витрата» на головному |
-| `ReconcileView` | sheet | «Звірити» на головному |
-| `ExpenseListView` | push | «Усі витрати» на головному |
+| `WalletView` | корінь вкладки «Головна» | старт застосунку |
+| `AnalyticsView` | корінь вкладки «Аналітика» | панель вкладок |
+| `SettingsView` | корінь вкладки «Налаштування» | панель вкладок |
+| `ReconcileView` | sheet | «Звірити» на картці гаманця |
+| `WalletsView` | sheet | кнопка гаманців у шапці головної або «Керувати гаманцями» в налаштуваннях |
+| `WalletFormView` | push у sheet | «Додати гаманець» або тап по гаманцю |
+| `AnalyticsPeriodView` | sheet | чип «Період…» в аналітиці |
+| `ExpenseListView` | push | «Усі» на головному |
 | `ExpenseDetailView` | push | рядок витрати в списку або на головному |
+
+Окремого екрана «+ Витрата» немає: форма швидкого додавання вбудована в головний екран і працює через `AddExpenseViewModel`. `WalletViewModel` отримує від `ScreenFactory` замикання, що створює цю ViewModel, і тримає по одній на гаманець, тож введене не губиться при свайпі між картками.
+
+## Стиль
+
+`Saifu/Views/Theme.swift` — єдине місце для кольорів, радіусів, відступів і шрифтів (системний `.rounded`). Іконки категорій (SF Symbols) і кольори для діаграми задані в `ExpenseCategory+Style.swift` у шарі View, тож модель про вигляд не знає. Спільні компоненти лежать у `Views/Components/`: `AmountField` (поле суми з фільтром `AmountInputFilter`: лише цифри й одна кома, не більше `currency.minorUnits` знаків після неї), `CategoryMenu`, `ChipPicker`, `ExpenseRowView`, `BackButton`, `PageDots`. Клавіатура закривається тапом по порожньому місцю (`dismissKeyboardOnBackgroundTap`), прокручуванням і кнопкою «Готово» на самій клавіатурі (`.submitLabel(.done)`).
 
 ## Спільний стан між екранами
 
@@ -91,7 +109,11 @@ View не знають про репозиторій, стратегію, кур
 - Баланс, рядки та список є обчислюваними властивостями ViewModel. SwiftUI сам відстежує, що читається з гаманця, і перемальовує всі екрани, що від нього залежать.
 - Після додавання в sheet, звірки, редагування чи видалення головний екран і список оновлюються без `reload()` і без копіювання даних.
 - `ExpenseDetailViewModel` читає витрату з гаманця щоразу за `expenseID`. Якщо витрати вже немає, екран показує «Витрату не знайдено».
-- Курс НБУ запитується лише при зміні гаманця, а `≈ ₴` рахується з живого балансу.
+- `InMemoryWalletRepository` позначено `@Observable` і має `remove(id:)` та `move(fromOffsets:toOffset:)` (порядок карток). ViewModel читають `repository.wallets()` щоразу, а не копіюють масив в `init`, тому гаманець, доданий, видалений чи переставлений у sheet «Гаманці», одразу з'являється в тому ж порядку у свайп-картках і в меню аналітики.
+- У `CashWallet` назва стала змінною, а валюту змінює `changeCurrency(to:)`, лише поки в гаманці немає записів (інакше `WalletError.walletNotEmpty`), бо суми не перераховуються.
+- Домашня валюта зберігається в `AppSettings` (`@Observable`, ключ `homeCurrency` у `UserDefaults`, за замовчуванням UAH). `@AppStorage` тут не підходить: його бачать лише View, а «≈ …» рахують ViewModel. Зміна валюти в налаштуваннях одразу перераховує всі екрани.
+- `CurrencyConverter` один раз завантажує курси всіх валют через `ExchangeRateProvider` і перераховує суму крос-курсом через гривню (`ExchangeRate.toUAHMinor` / `fromUAHMinor`, `Decimal` без `Double`). Якщо валюта гаманця збігається з домашньою, рядок «≈» не показується.
+- `AnalyticsViewModel` рахує підсумки за період через `CashWallet.totalsByCategory(in: Range<Date>?)`. Необов'язковий діапазон — єдина зміна моделі в редизайні; без нього метод поводиться як раніше. Власний період задається в sheet двома датами з перевіркою «з ≤ по».
 - Для редагування до `CashWallet` додано `updateExpense(_:)` і `removeExpense(id:)`. Вони мають ті самі перевірки, що й `addExpense`: `negativeAmount`, а для відсутньої витрати новий `WalletError.expenseNotFound`. Гаманець отримав `id`, і `InMemoryWalletRepository.save` шукає за ним, а не за `name`.
 
 ## Патерни
@@ -150,13 +172,16 @@ View не знають про репозиторій, стратегію, кур
 - Наприклад, `InMemoryWalletRepository` і `DemoWalletRepository` взаємозамінні, а `ChainedCategoryStrategy` сама є стратегією.
 - Спадкування тут не використовується, тому принцип виявляється лише через протоколи.
 
+- `LocalReminderScheduler` лише планує й скасовує локальні сповіщення; `SettingsViewModel` лише керує станом налаштувань.
+  - Нагадування приходять у вибраний час (за замовчуванням 20:00). «Щодня» і «щотижня» — повторюваний `UNCalendarNotificationTrigger` (щотижня — у день тижня, коли ввімкнули). «Раз на 3 дні» календарний тригер виразити не може, тому планується серія з 10 одноразових нагадувань наперед; вона поновлюється при кожному запуску (`RootView.task` → `ScreenFactory.appDidLaunch`) і при зміні часу чи інтервалу. День тижня й ритм серії планувальник бере з уже запланованих запитів, тож окремо їх не зберігає.
+
 **I: розділення інтерфейсів.**
 - `NBURecordSource` має один метод, `ExchangeRateProvider` також один.
 - `learn(note:category:)` має стандартну порожню реалізацію, тому `KeywordCategoryStrategy` не змушений реалізовувати непотрібне.
 - Чесне застереження: `WalletRepository` має два методи. Пошук `wallet(id:)` додано стандартною реалізацією в extension, тож реалізації протоколу його не пишуть. Ділити протокол поки не потрібно.
 
 **D: інверсія залежностей.**
-- ViewModel залежать від протоколів `WalletRepository`, `CategorySuggestionStrategy`, `ExchangeRateProvider` і отримують їх через `init` від `ScreenFactory`. Конкретні типи створюються лише у `SaifuApp`.
+- ViewModel залежать від протоколів `WalletRepository`, `CategorySuggestionStrategy`, `ExchangeRateProvider`, `ReminderScheduling` і отримують їх через `init` від `ScreenFactory`. `UNUserNotificationCenter` і `UserDefaults` створюються лише в `SaifuApp`; для `#Preview` підставляються `PreviewReminderScheduler` і окремий `UserDefaults(suiteName:)`. Конкретні типи створюються лише у `SaifuApp`.
 - Чесне застереження: ViewModel напряму використовують `CashWallet`, `ExpenseBuilder` і `AppRouter`. У кожного з них єдина реалізація, тож абстракція над ними була б штучною.
 
 ## Як замінити джерела без зміни ViewModel
@@ -192,8 +217,8 @@ rateProvider: NBURateAdapter(source: NBUAPIRecordSource())
 
 | Патерн / принцип | Компонент | Призначення |
 |---|---|---|
-| MVVM | п'ять пар View / ViewModel, моделі | Розділення показу, стану екрана й домену |
-| Router | `AppRouter`, `Route`, `Sheet`, `RootView` | Усі переходи в одному місці, View не керують навігацією |
+| MVVM | пари View / ViewModel для кожного екрана, моделі | Розділення показу, стану екрана й домену |
+| Router | `AppRouter`, `AppTab`, `Route`, `Sheet`, `RootView` | Усі переходи в одному місці, View не керують навігацією |
 | Factory | `ScreenFactory` | Створення екранів і їхніх ViewModel із залежностей кореня |
 | Observer | `@Observable CashWallet` | Усі екрани бачать один стан гаманця |
 | Repository | `WalletRepository`, `InMemoryWalletRepository`, `DemoWalletRepository` | Джерело гаманців, яке можна підміняти |
@@ -201,6 +226,8 @@ rateProvider: NBURateAdapter(source: NBUAPIRecordSource())
 | Strategy | `CategorySuggestionStrategy`, `KeywordCategoryStrategy`, `LastUsedCategoryStrategy` | Взаємозамінні способи підказати категорію |
 | Composite (за роллю) | `ChainedCategoryStrategy` | Кілька стратегій як одна |
 | Adapter | `NBURateAdapter` | Формат НБУ → `ExchangeRate` |
+| Service за протоколом | `ReminderScheduling`, `LocalReminderScheduler` | Нагадування про звірку, підміна в превʼю |
+| Спільний стан | `AppSettings`, `CurrencyConverter` | Домашня валюта і крос-курс для всіх екранів |
 | Composition root | `SaifuApp` | Єдине місце створення залежностей |
 | S | `ExpenseBuilder`, `NBURateAdapter`, `EntryRow` | Кожен тип має одну задачу |
 | O | `CategoryDictionaries` | Новий словник без змін класів |
