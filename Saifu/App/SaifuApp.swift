@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 @main
 struct SaifuApp: App {
@@ -17,6 +18,9 @@ struct SaifuApp: App {
             KeywordCategoryStrategy(dictionary: CategoryDictionaries.all)
         ]),
         rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
+        reminderScheduler: LocalReminderScheduler(center: .current()),
+        defaults: .standard,
+        appVersion: SaifuApp.appVersion,
         router: AppRouter()
     )
 
@@ -24,5 +28,13 @@ struct SaifuApp: App {
         WindowGroup {
             RootView(factory: factory)
         }
+    }
+
+    /// "1.0 (1)" з Info.plist.
+    private static var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
     }
 }
