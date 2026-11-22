@@ -10,18 +10,19 @@ import SwiftUI
 @main
 struct SaifuApp: App {
     // Композиційний корінь: тут обирається репозиторій (InMemoryWalletRepository() — порожній старт)
-    @State private var viewModel = WalletViewModel(
+    @State private var factory = ScreenFactory(
         repository: DemoWalletRepository(),
         categoryStrategy: ChainedCategoryStrategy([
             LastUsedCategoryStrategy(),
             KeywordCategoryStrategy(dictionary: CategoryDictionaries.all)
         ]),
-        rateProvider: NBURateAdapter(source: DemoNBURecordSource())
+        rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
+        router: AppRouter()
     )
 
     var body: some Scene {
         WindowGroup {
-            WalletView(viewModel: viewModel)
+            RootView(factory: factory)
         }
     }
 }

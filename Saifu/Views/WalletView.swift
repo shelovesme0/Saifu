@@ -2,9 +2,6 @@ import SwiftUI
 
 struct WalletView: View {
     @Bindable var viewModel: WalletViewModel
-    @State private var amountText = ""
-    @State private var category: ExpenseCategory?
-    @State private var note = ""
 
     var body: some View {
         List {
@@ -23,32 +20,8 @@ struct WalletView: View {
                 }
             }
 
-            Section("Нова витрата") {
-                TextField("Сума", text: $amountText)
-                    .keyboardType(.decimalPad)
-                TextField("Нотатка", text: $note)
-                    .onChange(of: note) {
-                        if let suggested = viewModel.suggestedCategory(for: note) {
-                            category = suggested
-                        }
-                    }
-                Picker("Категорія", selection: $category) {
-                    Text("— оберіть —").tag(ExpenseCategory?.none)
-                    ForEach(ExpenseCategory.allCases, id: \.self) { category in
-                        Text("\(category.emoji) \(category.title)").tag(ExpenseCategory?.some(category))
-                    }
-                }
-                if let message = viewModel.errorMessage {
-                    Text(message)
-                        .foregroundStyle(.red)
-                }
-                Button("Додати") {
-                    if viewModel.addExpense(amountText: amountText, category: category, note: note) {
-                        amountText = ""
-                        note = ""
-                        category = nil
-                    }
-                }
+            Section {
+                Button("+ Витрата") { viewModel.addExpenseTapped() }
             }
 
             Section("Операції") {
@@ -69,16 +42,10 @@ struct WalletView: View {
                 }
             }
         }
+        .navigationTitle("Saifu")
     }
 }
 
 #Preview {
-    WalletView(viewModel: WalletViewModel(
-        repository: DemoWalletRepository(),
-        categoryStrategy: ChainedCategoryStrategy([
-            LastUsedCategoryStrategy(),
-            KeywordCategoryStrategy(dictionary: CategoryDictionaries.all)
-        ]),
-        rateProvider: NBURateAdapter(source: DemoNBURecordSource())
-    ))
+    RootView(factory: .preview())
 }
