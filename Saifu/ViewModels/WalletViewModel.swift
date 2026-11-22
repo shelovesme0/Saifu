@@ -75,6 +75,11 @@ final class WalletViewModel {
         router.presentAddExpense(walletID: wallet.id)
     }
 
+    func reconcileTapped() {
+        guard let wallet = selectedWallet else { return }
+        router.presentReconcile(walletID: wallet.id)
+    }
+
     /// Курс беремо асинхронно; застарілий запит скасовуємо при зміні гаманця.
     private func loadRate() {
         rateTask?.cancel()

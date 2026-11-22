@@ -36,6 +36,7 @@ struct WalletView: View {
 
             Section {
                 Button("+ Витрата", systemImage: "plus.circle.fill") { viewModel.addExpenseTapped() }
+                Button("Звірити", systemImage: "checkmark.circle") { viewModel.reconcileTapped() }
             }
 
             Section("Останні операції") {

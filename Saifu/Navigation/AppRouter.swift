@@ -4,6 +4,7 @@ import Observation
 /// Модальні екрани (sheet).
 enum Sheet: Identifiable, Hashable {
     case addExpense(walletID: UUID)
+    case reconcile(walletID: UUID)
 
     var id: Self { self }
 }
@@ -16,6 +17,10 @@ final class AppRouter {
 
     func presentAddExpense(walletID: UUID) {
         sheet = .addExpense(walletID: walletID)
+    }
+
+    func presentReconcile(walletID: UUID) {
+        sheet = .reconcile(walletID: walletID)
     }
 
     func dismissSheet() {

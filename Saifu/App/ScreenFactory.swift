@@ -29,6 +29,12 @@ final class ScreenFactory {
                 categoryStrategy: categoryStrategy,
                 router: router
             ))
+        case .reconcile(let walletID):
+            ReconcileView(viewModel: ReconcileViewModel(
+                walletID: walletID,
+                repository: repository,
+                router: router
+            ))
         }
     }
 }
