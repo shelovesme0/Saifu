@@ -48,6 +48,9 @@ final class ScreenFactory {
 
     /// Дії при запуску застосунку (переплановування нагадувань).
     func appDidLaunch() async {
+        #if DEBUG
+        openScreenFromLaunchArguments()
+        #endif
         await settingsViewModel.appDidLaunch()
     }
 
@@ -136,6 +139,42 @@ extension ScreenFactory {
             appVersion: "1.0 (preview)",
             router: AppRouter()
         )
+    }
+
+    /// Лише Debug: `-uiScreen <назва>` у аргументах запуску відкриває екран через роутер
+    /// (для скриншотів: `xcrun simctl launch <device> <bundle id> -uiScreen analytics`).
+    /// Назви: expenses, detail, reconcile, analytics, period, settings, wallets, newWallet.
+    func openScreenFromLaunchArguments() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-uiScreen"), index + 1 < arguments.count,
+              let wallet = repository.wallets().first else { return }
+        let latestExpense = wallet.expenses.max { $0.date < $1.date }
+
+        switch arguments[index + 1] {
+        case "expenses":
+            router.showExpenseList(walletID: wallet.id)
+        case "detail":
+            router.showExpenseList(walletID: wallet.id)
+            if let latestExpense {
+                router.showExpenseDetail(walletID: wallet.id, expenseID: latestExpense.id)
+            }
+        case "reconcile":
+            router.presentReconcile(walletID: wallet.id)
+        case "analytics":
+            router.selectedTab = .analytics
+        case "period":
+            router.selectedTab = .analytics
+            analyticsViewModel.selectPeriod(.custom)
+        case "settings":
+            router.selectedTab = .settings
+        case "wallets":
+            router.presentWallets()
+        case "newWallet":
+            router.presentWallets()
+            router.showAddWallet()
+        default:
+            break
+        }
     }
 
     /// Перший гаманець для превʼю екранів, які отримують ID.
