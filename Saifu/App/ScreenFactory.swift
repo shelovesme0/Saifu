@@ -8,6 +8,7 @@ final class ScreenFactory {
     let walletViewModel: WalletViewModel
     let analyticsViewModel: AnalyticsViewModel
     let settingsViewModel: SettingsViewModel
+    let backupViewModel: BackupViewModel
     private let repository: WalletRepository
     private let converter: CurrencyConverter
     /// Попередження при запуску (сховище не відкрилося); показується один раз.
@@ -18,6 +19,8 @@ final class ScreenFactory {
          rateProvider: any ExchangeRateProvider,
          rateCache: (any RateCacheInvalidating)? = nil,
          reminderScheduler: any ReminderScheduling,
+         backupFolder: any BackupFolderAccess,
+         localBackupDirectory: URL,
          defaults: UserDefaults,
          appVersion: String,
          router: AppRouter,
@@ -52,6 +55,29 @@ final class ScreenFactory {
             defaults: defaults,
             appVersion: appVersion
         )
+        // Після імпорту оновлюються екрани, що тримали старі екземпляри гаманців
+        let walletViewModel = walletViewModel
+        let analyticsViewModel = analyticsViewModel
+        backupViewModel = BackupViewModel(
+            service: JSONBackupService(repository: repository, appVersion: appVersion),
+            folder: backupFolder,
+            defaults: defaults,
+            localDirectory: localBackupDirectory,
+            onDataReplaced: {
+                router.resetNavigation()
+                walletViewModel.dataReplaced()
+                analyticsViewModel.dataReplaced()
+            }
+        )
+    }
+
+    /// Вихід у фон: автоматична резервна копія. Фонове завдання дає iOS дочекатися запису файлу.
+    func appDidEnterBackground() {
+        let task = UIApplication.shared.beginBackgroundTask(withName: "Saifu backup")
+        backupViewModel.appDidEnterBackground()
+        if task != .invalid {
+            UIApplication.shared.endBackgroundTask(task)
+        }
     }
 
     /// Курси на сьогодні: при запуску й поверненні на передній план (за той самий день — без запиту).
@@ -78,7 +104,7 @@ final class ScreenFactory {
     }
 
     func settingsView() -> some View {
-        SettingsView(viewModel: settingsViewModel)
+        SettingsView(viewModel: settingsViewModel, backup: backupViewModel)
     }
 
     // MARK: - Sheet «Гаманці»
@@ -148,6 +174,8 @@ extension ScreenFactory {
             ]),
             rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
             reminderScheduler: PreviewReminderScheduler(),
+            backupFolder: BookmarkBackupFolder(defaults: UserDefaults(suiteName: "saifu.preview") ?? .standard),
+            localBackupDirectory: FileManager.default.temporaryDirectory,
             defaults: UserDefaults(suiteName: "saifu.preview") ?? .standard,
             appVersion: "1.0 (preview)",
             router: AppRouter()

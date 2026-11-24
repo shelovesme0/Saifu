@@ -69,6 +69,13 @@ final class WalletViewModel {
         addExpenseViewModels = addExpenseViewModels.filter { id, _ in wallets.contains { $0.id == id } }
     }
 
+    /// Після імпорту копії: гаманці — нові екземпляри навіть з тими самими id,
+    /// тому форми додавання (тримали старі) створюються наново, а вибір — перший гаманець.
+    func dataReplaced() {
+        addExpenseViewModels = [:]
+        selectedWalletID = wallets.first?.id
+    }
+
     /// Привітання за часом доби.
     var greeting: String {
         switch Calendar.current.component(.hour, from: Date()) {

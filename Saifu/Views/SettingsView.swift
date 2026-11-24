@@ -1,8 +1,10 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Налаштування: керування гаманцями, домашня валюта, нагадування, версія.
+/// Налаштування: керування гаманцями, домашня валюта, нагадування, резервна копія, версія.
 struct SettingsView: View {
     @Bindable var viewModel: SettingsViewModel
+    @Bindable var backup: BackupViewModel
 
     var body: some View {
         List {
@@ -17,6 +19,7 @@ struct SettingsView: View {
             walletsSection
             currencySection
             reminderSection
+            backupSection
             #if DEBUG
             developerSection
             #endif
@@ -38,6 +41,28 @@ struct SettingsView: View {
         .font(Theme.bodyFont)
         .animation(.snappy, value: viewModel.isReminderEnabled)
         .animation(.snappy, value: viewModel.reminderMessage)
+        .animation(.snappy, value: backup.isAutoBackupEnabled)
+        .animation(.snappy, value: backup.isFolderUnavailable)
+        .animation(.snappy, value: backup.message)
+        // Один пікер на екран і для папки, і для файлу: два .fileImporter на одному view конфліктують
+        .fileImporter(isPresented: $backup.isPickerPresented,
+                      allowedContentTypes: backup.pickerMode == .folder ? [.folder] : [.json]) { result in
+            backup.pickerFinished(result)
+        }
+        .fileExporter(isPresented: $backup.isExporterPresented,
+                      document: backup.exportDocument,
+                      contentType: .json,
+                      defaultFilename: backup.exportFileName) { result in
+            backup.exportFinished(result)
+        }
+        .confirmationDialog("Імпортувати резервну копію?",
+                            isPresented: $backup.isConfirmingImport,
+                            titleVisibility: .visible) {
+            Button("Замінити", role: .destructive) { backup.confirmImport() }
+            Button("Скасувати", role: .cancel) {}
+        } message: {
+            Text("Поточні дані буде замінено. Перед цим буде збережено їхню копію")
+        }
         .themedScreen()
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -123,6 +148,75 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.shortage)
             }
         }
+    }
+
+    private var backupSection: some View {
+        Section {
+            Toggle(isOn: autoBackupBinding) {
+                Label("Автоматична резервна копія", systemImage: "externaldrive.badge.timemachine")
+                    .foregroundStyle(Theme.text)
+            }
+            .tint(Theme.accent)
+            .listRowBackground(Theme.card)
+
+            if backup.isAutoBackupEnabled {
+                if backup.isFolderUnavailable {
+                    Label("Немає доступу до папки копій. Можливо, її видалили або перемістили",
+                          systemImage: "exclamationmark.triangle")
+                        .font(Theme.captionFont)
+                        .foregroundStyle(Theme.shortage)
+                        .listRowBackground(Theme.card)
+                    rowButton("Вибрати папку знову", systemImage: "folder.badge.questionmark") {
+                        backup.chooseFolderAgainTapped()
+                    }
+                } else if let folderName = backup.folderName {
+                    HStack {
+                        Label("Папка", systemImage: "folder")
+                            .foregroundStyle(Theme.text)
+                        Spacer()
+                        Text(folderName)
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1)
+                    }
+                    .listRowBackground(Theme.card)
+                }
+            }
+
+            rowButton("Експортувати зараз", systemImage: "square.and.arrow.up") {
+                backup.exportTapped()
+            }
+            rowButton("Імпортувати", systemImage: "square.and.arrow.down") {
+                backup.importTapped()
+            }
+        } header: {
+            header("Резервна копія")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(backup.lastBackupText)
+                    .foregroundStyle(Theme.secondaryText)
+                if let message = backup.message {
+                    Text(message.text)
+                        .foregroundStyle(message.isError ? Theme.shortage : Theme.match)
+                }
+            }
+            .font(Theme.captionFont)
+        }
+    }
+
+    private func rowButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .foregroundStyle(Theme.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .listRowBackground(Theme.card)
+    }
+
+    /// Тумблер викликає ViewModel: увімкнення спершу відкриває вибір папки.
+    private var autoBackupBinding: Binding<Bool> {
+        Binding(get: { backup.isAutoBackupEnabled },
+                set: { backup.setAutoBackup($0) })
     }
 
     #if DEBUG

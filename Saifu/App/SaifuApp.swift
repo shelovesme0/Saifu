@@ -23,6 +23,9 @@ struct SaifuApp: App {
             rateProvider: NBURateAdapter(source: rateCache),
             rateCache: rateCache,
             reminderScheduler: LocalReminderScheduler(center: .current()),
+            backupFolder: BookmarkBackupFolder(defaults: .standard),
+            // Documents видно у «Файли → На iPhone → Saifu» (UIFileSharingEnabled у налаштуваннях збірки)
+            localBackupDirectory: URL.documentsDirectory,
             defaults: .standard,
             appVersion: SaifuApp.appVersion,
             router: AppRouter(),
