@@ -123,7 +123,7 @@ final class ScreenFactory {
     }
 }
 
-#if DEBUG
+// Не під #if DEBUG: #Preview компілюється і в Release, тому ці помічники потрібні в обох конфігураціях
 extension ScreenFactory {
     /// Залежності для #Preview (ті самі демо-дані, що й у застосунку; нагадування не плануються).
     static func preview() -> ScreenFactory {
@@ -141,6 +141,19 @@ extension ScreenFactory {
         )
     }
 
+    /// Перший гаманець для превʼю екранів, які отримують ID.
+    var previewWalletID: UUID {
+        repository.wallets()[0].id
+    }
+
+    /// Перша витрата першого гаманця для превʼю деталей.
+    var previewExpenseID: UUID {
+        repository.wallets()[0].expenses[0].id
+    }
+}
+
+#if DEBUG
+extension ScreenFactory {
     /// Лише Debug: `-uiScreen <назва>` у аргументах запуску відкриває екран через роутер
     /// (для скриншотів: `xcrun simctl launch <device> <bundle id> -uiScreen analytics`).
     /// Назви: expenses, detail, reconcile, analytics, period, settings, wallets, newWallet.
@@ -175,16 +188,6 @@ extension ScreenFactory {
         default:
             break
         }
-    }
-
-    /// Перший гаманець для превʼю екранів, які отримують ID.
-    var previewWalletID: UUID {
-        repository.wallets()[0].id
-    }
-
-    /// Перша витрата першого гаманця для превʼю деталей.
-    var previewExpenseID: UUID {
-        repository.wallets()[0].expenses[0].id
     }
 }
 #endif

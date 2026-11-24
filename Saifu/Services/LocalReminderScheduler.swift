@@ -104,11 +104,9 @@ struct LocalReminderScheduler: ReminderScheduling {
     }
 }
 
-#if DEBUG
 /// Для #Preview: нічого не планує, дозвіл завжди є.
 struct PreviewReminderScheduler: ReminderScheduling {
     func requestAuthorization() async -> Bool { true }
     func schedule(every interval: ReminderInterval, at time: ReminderTime) async {}
     func cancel() {}
 }
-#endif
