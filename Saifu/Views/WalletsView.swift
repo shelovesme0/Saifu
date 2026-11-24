@@ -56,16 +56,17 @@ struct WalletsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.background, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            // «Закрити» ліворуч, як у системних sheet
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Закрити") { viewModel.doneTapped() }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button(editMode.isEditing ? "Готово" : "Змінити") {
                     withAnimation(.snappy) {
                         editMode = editMode.isEditing ? .inactive : .active
                     }
                 }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Закрити") { viewModel.doneTapped() }
-                    .fontWeight(.semibold)
+                .fontWeight(editMode.isEditing ? .semibold : .regular)
             }
         }
         .confirmationDialog(
