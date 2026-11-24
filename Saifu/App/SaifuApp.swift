@@ -10,23 +10,48 @@ import UserNotifications
 
 @main
 struct SaifuApp: App {
-    // Композиційний корінь: тут обирається репозиторій (InMemoryWalletRepository() — порожній старт)
-    @State private var factory = ScreenFactory(
-        repository: DemoWalletRepository(),
-        categoryStrategy: ChainedCategoryStrategy([
-            LastUsedCategoryStrategy(),
-            KeywordCategoryStrategy(dictionary: CategoryDictionaries.all)
-        ]),
-        rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
-        reminderScheduler: LocalReminderScheduler(center: .current()),
-        defaults: .standard,
-        appVersion: SaifuApp.appVersion,
-        router: AppRouter()
-    )
+    // Композиційний корінь: тут обирається репозиторій (makeRepository) і решта залежностей
+    @State private var factory: ScreenFactory = {
+        let storage = SaifuApp.makeRepository()
+        return ScreenFactory(
+            repository: storage.repository,
+            categoryStrategy: ChainedCategoryStrategy([
+                LastUsedCategoryStrategy(),
+                KeywordCategoryStrategy(dictionary: CategoryDictionaries.all)
+            ]),
+            rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
+            reminderScheduler: LocalReminderScheduler(center: .current()),
+            defaults: .standard,
+            appVersion: SaifuApp.appVersion,
+            router: AppRouter(),
+            startupWarning: storage.warning
+        )
+    }()
 
     var body: some Scene {
         WindowGroup {
             RootView(factory: factory)
+        }
+    }
+
+    /// Звичайний запуск (Debug і Release) — гаманці на диску через SwiftData.
+    /// Лише Debug з `-uiScreen` — демо-дані в пам'яті, щоб скриншоти не залежали від збереженого.
+    /// Якщо сховище не відкрилося, застосунок працює з порожнім сховищем у пам'яті й попереджає про це.
+    private static func makeRepository() -> (repository: WalletRepository, warning: String?) {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-uiScreen") {
+            return (DemoWalletRepository(), nil)
+        }
+        #endif
+        do {
+            let container = try SaifuMigrationPlan.makeContainer(inMemory: false)
+            return (SwiftDataWalletRepository(container: container), nil)
+        } catch {
+            let warning = "Не вдалося відкрити збережені дані. Зміни в цьому сеансі не збережуться."
+            if let container = try? SaifuMigrationPlan.makeContainer(inMemory: true) {
+                return (SwiftDataWalletRepository(container: container), warning)
+            }
+            return (InMemoryWalletRepository(), warning)
         }
     }
 

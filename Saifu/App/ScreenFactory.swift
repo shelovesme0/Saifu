@@ -9,6 +9,8 @@ final class ScreenFactory {
     let analyticsViewModel: AnalyticsViewModel
     let settingsViewModel: SettingsViewModel
     private let repository: WalletRepository
+    /// Попередження при запуску (сховище не відкрилося); показується один раз.
+    let startupWarning: String?
 
     init(repository: WalletRepository,
          categoryStrategy: any CategorySuggestionStrategy,
@@ -16,9 +18,11 @@ final class ScreenFactory {
          reminderScheduler: any ReminderScheduling,
          defaults: UserDefaults,
          appVersion: String,
-         router: AppRouter) {
+         router: AppRouter,
+         startupWarning: String? = nil) {
         self.repository = repository
         self.router = router
+        self.startupWarning = startupWarning
         // Спільні для кількох екранів: домашня валюта і перерахунок курсів
         let settings = AppSettings(defaults: defaults)
         let converter = CurrencyConverter(rateProvider: rateProvider)
