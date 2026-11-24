@@ -14,6 +14,7 @@ final class SettingsViewModel {
     }
 
     private let settings: AppSettings
+    private let converter: CurrencyConverter
     private let router: AppRouter
     private let scheduler: any ReminderScheduling
     private let defaults: UserDefaults
@@ -26,11 +27,13 @@ final class SettingsViewModel {
     private(set) var reminderMessage: String?
 
     init(settings: AppSettings,
+         converter: CurrencyConverter,
          router: AppRouter,
          scheduler: any ReminderScheduling,
          defaults: UserDefaults,
          appVersion: String) {
         self.settings = settings
+        self.converter = converter
         self.router = router
         self.scheduler = scheduler
         self.defaults = defaults

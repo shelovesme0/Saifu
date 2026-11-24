@@ -209,6 +209,16 @@ final class AnalyticsViewModel {
         "У \(settings.homeCurrency.code)"
     }
 
+    /// Стан курсу для блоку «≈ …»; nil, якщо валюта гаманця збігається з домашньою.
+    var rateState: LoadState? {
+        guard let wallet = selectedWallet, wallet.currency != settings.homeCurrency else { return nil }
+        return converter.state
+    }
+
+    func retryRatesTapped() {
+        Task { await converter.reload() }
+    }
+
     /// "≈ …" у домашній валюті; nil, якщо валюта гаманця збігається з домашньою або курсу ще немає.
     var convertedTotalText: String? {
         guard let wallet = selectedWallet else { return nil }

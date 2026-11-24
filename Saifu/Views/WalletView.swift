@@ -26,6 +26,8 @@ struct WalletView: View {
             .dismissKeyboardOnBackgroundTap { focus = nil }
         }
         .scrollDismissesKeyboard(.interactively)
+        // Pull-to-refresh: курс НБУ завантажується наново (інакше — раз на день)
+        .refreshable { await viewModel.refreshRates() }
         // Гаманець додали чи видалили в налаштуваннях — картки оновлюються, вибір виправляється
         .onChange(of: viewModel.cards.map(\.id)) {
             viewModel.walletsChanged()
@@ -73,7 +75,17 @@ struct WalletView: View {
             .frame(height: 210)
 
             PageDots(count: viewModel.cards.count, index: viewModel.selectedIndex)
+
+            if let status = viewModel.rateStatus {
+                RateStatusView(state: status.state, rateText: status.rateText) {
+                    viewModel.retryRatesTapped()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.gutter + 4)
+                .transition(.opacity)
+            }
         }
+        .animation(.snappy, value: viewModel.rateStatus)
     }
 
     /// Перший запуск: гаманців ще немає.
@@ -170,7 +182,12 @@ private struct WalletCardView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
 
-                    if let converted = card.convertedText {
+                    if card.isRateLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(Theme.text)
+                            .frame(height: 20)
+                    } else if let converted = card.convertedText {
                         Text(converted)
                             .font(Theme.font(.subheadline, weight: .semibold))
                             .foregroundStyle(Theme.text.opacity(0.9))

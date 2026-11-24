@@ -9,7 +9,16 @@ struct WalletCard: Identifiable, Equatable {
     let balanceText: String
     /// "≈ …" у домашній валюті; nil, якщо валюта гаманця збігається з домашньою або курсу ще немає.
     let convertedText: String?
+    /// Курс ще завантажується: замість «≈ …» показується ProgressView.
+    let isRateLoading: Bool
     let isNegative: Bool
+}
+
+/// Рядок курсу під картками для обраного гаманця.
+struct RateStatus: Equatable {
+    let state: LoadState
+    /// "1 ¥ = 0,28336 ₴ · НБУ, 24.11.2026", коли курс є.
+    let rateText: String?
 }
 
 /// Головний екран. Стан обчислюється з @Observable репозиторію й гаманців,
@@ -76,8 +85,27 @@ final class WalletViewModel {
                        title: "\(wallet.name) · \(wallet.currency.code)",
                        balanceText: wallet.formattedBalance,
                        convertedText: converter.approximateText(wallet.expectedBalance, from: wallet.currency, to: home),
+                       isRateLoading: wallet.currency != home && converter.state == .loading,
                        isNegative: wallet.expectedBalance < 0)
         }
+    }
+
+    // MARK: - Курс
+
+    /// nil, якщо гаманця немає або його валюта збігається з домашньою (курс не потрібен).
+    var rateStatus: RateStatus? {
+        guard let wallet = selectedWallet, wallet.currency != settings.homeCurrency else { return nil }
+        return RateStatus(state: converter.state,
+                          rateText: converter.rateText(from: wallet.currency, to: settings.homeCurrency))
+    }
+
+    /// Pull-to-refresh: курс завантажується наново, навіть якщо на сьогодні вже є.
+    func refreshRates() async {
+        await converter.reload()
+    }
+
+    func retryRatesTapped() {
+        Task { await converter.reload() }
     }
 
     var selectedIndex: Int {
