@@ -40,11 +40,6 @@ struct ExpenseDetailView: View {
         .scrollDismissesKeyboard(.interactively)
         .themedScreen()
         .toolbar(.hidden, for: .navigationBar)
-        .confirmationDialog("Видалити цю витрату?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-            Button("Видалити", role: .destructive) {
-                withAnimation(.snappy) { viewModel.delete() }
-            }
-        }
     }
 
     private var form: some View {
@@ -99,6 +94,15 @@ struct ExpenseDetailView: View {
                     .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous))
             }
             .buttonStyle(.plain)
+            // Діалог прив'язаний до кнопки, щоб на iOS 26 він з'являвся біля неї, а не внизу екрана
+            .confirmationDialog("Видалити цю витрату?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+                Button("Видалити", role: .destructive) {
+                    withAnimation(.snappy) { viewModel.delete() }
+                }
+                Button("Скасувати", role: .cancel) {}
+            } message: {
+                Text("Баланс гаманця зміниться")
+            }
         }
         .animation(.snappy, value: viewModel.errorMessage)
     }
