@@ -10,12 +10,16 @@ struct WalletView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                cards
-                if let addViewModel = viewModel.addExpenseViewModel {
-                    QuickAddExpenseView(viewModel: addViewModel, focus: $focus)
-                        .padding(.horizontal, Theme.gutter)
+                if viewModel.hasWallets {
+                    cards
+                    if let addViewModel = viewModel.addExpenseViewModel {
+                        QuickAddExpenseView(viewModel: addViewModel, focus: $focus)
+                            .padding(.horizontal, Theme.gutter)
+                    }
+                    recent
+                } else {
+                    emptyState
                 }
-                recent
             }
             .padding(.top, 8)
             .padding(.bottom, 16)
@@ -70,6 +74,30 @@ struct WalletView: View {
 
             PageDots(count: viewModel.cards.count, index: viewModel.selectedIndex)
         }
+    }
+
+    /// Перший запуск: гаманців ще немає.
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "wallet.bifold")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.accent)
+            Text("Гаманців ще немає")
+                .font(Theme.headlineFont)
+                .foregroundStyle(Theme.text)
+            Text("Створіть гаманець у валюті, якою розраховуєтеся готівкою, і вкажіть, скільки в ньому зараз.")
+                .font(Theme.bodyFont)
+                .foregroundStyle(Theme.secondaryText)
+                .multilineTextAlignment(.center)
+            PrimaryButton(title: "Створити перший гаманець") {
+                viewModel.createFirstWalletTapped()
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .themedCard()
+        .padding(.horizontal, Theme.gutter)
     }
 
     private var recent: some View {

@@ -104,6 +104,17 @@ final class WalletViewModel {
             .map { EntryRow(expense: $0, currency: wallet.currency) }
     }
 
+    /// false на першому запуску: замість карток показується порожній стан.
+    var hasWallets: Bool {
+        !wallets.isEmpty
+    }
+
+    /// Порожній стан → наявна форма нового гаманця в sheet «Гаманці».
+    func createFirstWalletTapped() {
+        router.presentWallets()
+        router.showAddWallet()
+    }
+
     func manageWalletsTapped() {
         router.presentWallets()
     }

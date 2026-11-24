@@ -18,11 +18,13 @@ struct AnalyticsView: View {
                 }
                 .padding(.top, 8)
 
-                walletMenu
+                if viewModel.hasWallets {
+                    walletMenu
 
-                ChipPicker(options: AnalyticsViewModel.Period.allCases,
-                           selection: periodBinding,
-                           title: \.title)
+                    ChipPicker(options: AnalyticsViewModel.Period.allCases,
+                               selection: periodBinding,
+                               title: \.title)
+                }
 
                 if viewModel.stats.isEmpty {
                     emptyState
@@ -150,8 +152,9 @@ struct AnalyticsView: View {
         VStack(spacing: 10) {
             Image(systemName: "chart.pie")
                 .font(.system(size: 40))
-            Text("Витрат за період немає")
+            Text(viewModel.emptyText)
                 .font(Theme.headlineFont)
+                .multilineTextAlignment(.center)
         }
         .foregroundStyle(Theme.secondaryText)
         .frame(maxWidth: .infinity)
