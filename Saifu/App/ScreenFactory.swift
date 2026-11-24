@@ -9,6 +9,8 @@ final class ScreenFactory {
     let analyticsViewModel: AnalyticsViewModel
     let settingsViewModel: SettingsViewModel
     private let repository: WalletRepository
+    /// Попередження при запуску (сховище не відкрилося); показується один раз.
+    let startupWarning: String?
 
     init(repository: WalletRepository,
          categoryStrategy: any CategorySuggestionStrategy,
@@ -16,9 +18,11 @@ final class ScreenFactory {
          reminderScheduler: any ReminderScheduling,
          defaults: UserDefaults,
          appVersion: String,
-         router: AppRouter) {
+         router: AppRouter,
+         startupWarning: String? = nil) {
         self.repository = repository
         self.router = router
+        self.startupWarning = startupWarning
         // Спільні для кількох екранів: домашня валюта і перерахунок курсів
         let settings = AppSettings(defaults: defaults)
         let converter = CurrencyConverter(rateProvider: rateProvider)
@@ -123,7 +127,7 @@ final class ScreenFactory {
     }
 }
 
-#if DEBUG
+// Не під #if DEBUG: #Preview компілюється і в Release, тому ці помічники потрібні в обох конфігураціях
 extension ScreenFactory {
     /// Залежності для #Preview (ті самі демо-дані, що й у застосунку; нагадування не плануються).
     static func preview() -> ScreenFactory {
@@ -141,6 +145,19 @@ extension ScreenFactory {
         )
     }
 
+    /// Перший гаманець для превʼю екранів, які отримують ID.
+    var previewWalletID: UUID {
+        repository.wallets()[0].id
+    }
+
+    /// Перша витрата першого гаманця для превʼю деталей.
+    var previewExpenseID: UUID {
+        repository.wallets()[0].expenses[0].id
+    }
+}
+
+#if DEBUG
+extension ScreenFactory {
     /// Лише Debug: `-uiScreen <назва>` у аргументах запуску відкриває екран через роутер
     /// (для скриншотів: `xcrun simctl launch <device> <bundle id> -uiScreen analytics`).
     /// Назви: expenses, detail, reconcile, analytics, period, settings, wallets, newWallet.
@@ -175,16 +192,6 @@ extension ScreenFactory {
         default:
             break
         }
-    }
-
-    /// Перший гаманець для превʼю екранів, які отримують ID.
-    var previewWalletID: UUID {
-        repository.wallets()[0].id
-    }
-
-    /// Перша витрата першого гаманця для превʼю деталей.
-    var previewExpenseID: UUID {
-        repository.wallets()[0].expenses[0].id
     }
 }
 #endif

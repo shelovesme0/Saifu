@@ -1,7 +1,7 @@
 import Foundation
 
 /// Категорії витрат. Загальні, без прив'язки до країни.
-enum ExpenseCategory: CaseIterable {
+enum ExpenseCategory: String, CaseIterable {
     case food, groceries, smallShop, transport, household, leisure, untracked
 
     // switch по enum: назва українською

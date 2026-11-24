@@ -1,14 +1,14 @@
 import Foundation
 
-/// Джерело гаманців для ViewModel. Реалізації можна підміняти (пам'ять, демо, пізніше диск).
+/// Джерело гаманців для ViewModel. Реалізації можна підміняти (диск, пам'ять, демо).
 protocol WalletRepository {
     func wallets() -> [CashWallet]
-    /// Зберігає новий гаманець або оновлює наявний (за `id`).
-    func save(_ wallet: CashWallet)
+    /// Зберігає новий гаманець або оновлює наявний (за `id`). Кидає `RepositoryError`, якщо запис не вдався.
+    func save(_ wallet: CashWallet) throws
     /// Видаляє гаманець; невідомий `id` ігнорується.
-    func remove(id: CashWallet.ID)
+    func remove(id: CashWallet.ID) throws
     /// Змінює порядок гаманців (як у List.onMove); порядок бачать усі екрани.
-    func move(fromOffsets source: IndexSet, toOffset destination: Int)
+    func move(fromOffsets source: IndexSet, toOffset destination: Int) throws
 }
 
 extension WalletRepository {

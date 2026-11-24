@@ -78,6 +78,16 @@ final class AnalyticsViewModel {
         wallets.first { $0.id == selectedWalletID } ?? wallets.first
     }
 
+    /// false, поки не створено жодного гаманця.
+    var hasWallets: Bool {
+        !wallets.isEmpty
+    }
+
+    /// Текст порожнього стану: немає гаманців або немає витрат за період.
+    var emptyText: String {
+        hasWallets ? "Витрат за період немає" : "Створіть гаманець, щоб бачити аналітику"
+    }
+
     var walletOptions: [WalletOption] {
         wallets.map { WalletOption(id: $0.id, title: "\($0.name) · \($0.currency.code)") }
     }

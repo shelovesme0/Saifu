@@ -1,7 +1,7 @@
 import Foundation
 
 /// Звідки взялося поповнення.
-enum TopUpSource {
+enum TopUpSource: String {
     case atm
     /// Коригувальне поповнення при надлишку під час звірки.
     case correction

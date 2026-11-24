@@ -2,6 +2,7 @@
 
 Практична робота 2: MVVM, патерни Builder / Strategy / Adapter, принципи SOLID.
 Практична робота 3: екрани у трьох вкладках (`TabView`), навігація через `AppRouter`, спільний стан між екранами, темний дизайн (`Theme`). Карта переходів, анімації та сценарій проходження: [navigation.md](navigation.md).
+Збереження даних між запусками: SwiftData за протоколом `WalletRepository` (розділ [«Збереження даних»](#збереження-даних)).
 
 ## Чому MVVM
 
@@ -31,6 +32,8 @@ graph TD
     Wallet["CashWallet (@Observable) + моделі"]
     InMem["InMemoryWalletRepository"]
     Demo["DemoWalletRepository"]
+    SD["SwiftDataWalletRepository"]
+    Entities["WalletEntity · ExpenseEntity<br/>TopUpEntity · ReconciliationEntity<br/>(SaifuSchemaV1, @Model)"]
     Chain["ChainedCategoryStrategy"]
     Kw["KeywordCategoryStrategy"]
     Last["LastUsedCategoryStrategy"]
@@ -61,6 +64,9 @@ graph TD
     InMem -.реалізує.-> Repo
     Demo -.реалізує.-> Repo
     Demo --> InMem
+    SD -.реалізує.-> Repo
+    SD --> Entities
+    Entities -.мапінг.-> Wallet
     Chain -.реалізує.-> Strat
     Kw -.реалізує.-> Strat
     Last -.реалізує.-> Strat
@@ -71,7 +77,7 @@ graph TD
     DemoSrc -.реалізує.-> Source
 ```
 
-View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `DemoNBURecordSource`, `LocalReminderScheduler`, `AppRouter`) створюються тільки в `SaifuApp`. `ScreenFactory` отримує їх через `init` і збирає з них екрани.
+View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`SwiftDataWalletRepository` або `DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `DemoNBURecordSource`, `LocalReminderScheduler`, `AppRouter`) створюються тільки в `SaifuApp`. `ScreenFactory` отримує їх через `init` і збирає з них екрани.
 
 ## Навігація: `AppRouter`
 
@@ -115,6 +121,62 @@ View не знають про репозиторій, стратегію, кур
 - `CurrencyConverter` один раз завантажує курси всіх валют через `ExchangeRateProvider` і перераховує суму крос-курсом через гривню (`ExchangeRate.toUAHMinor` / `fromUAHMinor`, `Decimal` без `Double`). Якщо валюта гаманця збігається з домашньою, рядок «≈» не показується.
 - `AnalyticsViewModel` рахує підсумки за період через `CashWallet.totalsByCategory(in: Range<Date>?)`. Необов'язковий діапазон — єдина зміна моделі в редизайні; без нього метод поводиться як раніше. Власний період задається в sheet двома датами з перевіркою «з ≤ по».
 - Для редагування до `CashWallet` додано `updateExpense(_:)` і `removeExpense(id:)`. Вони мають ті самі перевірки, що й `addExpense`: `negativeAmount`, а для відсутньої витрати новий `WalletError.expenseNotFound`. Гаманець отримав `id`, і `InMemoryWalletRepository.save` шукає за ним, а не за `name`.
+
+## Збереження даних
+
+Гаманці, витрати, поповнення, звірки й порядок гаманців зберігаються на пристрої між запусками. Налаштування (домашня валюта, нагадування) лишаються в `UserDefaults` через `AppSettings`: це кілька простих значень, і окрема схема для них не потрібна.
+
+### Чому SwiftData
+
+- Входить в iOS 17, яка й так мінімальна для проєкту: жодних сторонніх залежностей.
+- Працює зі Swift-класами напряму, без `.xcdatamodeld` і ручного SQL, на відміну від Core Data чи SQLite.
+- Версії схеми (`VersionedSchema`) і план міграцій (`SchemaMigrationPlan`) вбудовані, тож майбутні зміни моделі не зламають уже збережені дані.
+- Для гаманців і списку записів достатньо локальної бази; синхронізація чи сервер поки не потрібні.
+
+### Окремі сутності замість `@Model` у доменних моделях
+
+Доменні моделі (`CashWallet`, `Expense`, `CashTopUp`, `Reconciliation`, `Currency`, `ExpenseCategory`) лишилися звичайним Swift. Сховище описують окремі класи в `Saifu/Persistence/`:
+
+| Сутність | Поля | Зв'язок |
+|---|---|---|
+| `WalletEntity` | `id` (унікальний), `name`, `currencyRaw`, `sortIndex` | → витрати, поповнення, остання звірка; усі з каскадним видаленням |
+| `ExpenseEntity` | `id`, `amount`, `categoryRaw`, `date`, `note?`, `receiptID?` | `wallet` (зворотний) |
+| `TopUpEntity` | `id`, `amount`, `date`, `sourceRaw` | `wallet` |
+| `ReconciliationEntity` | `expected`, `actual`, `date` | `wallet` |
+
+Чому так:
+- **Домен не залежить від сховища.** `Expense` і `CashTopUp` — `struct` з валідацією в `CashWallet` (`addExpense`, `reconcile` тощо). `@Model` вимагає класів і змінює семантику: зміни йдуть у контекст, а не в значення. Перетворення моделей на `@Model` означало б переписати лаби 1–3.
+- **ViewModel і View не знають про SwiftData.** Вони працюють із тими самими `CashWallet`, що й раніше. Замінити SwiftData на щось інше можна, не чіпаючи нічого, крім `Persistence/` і репозиторію.
+- **Enum-и зберігаються як `rawValue`** (`Currency`, `ExpenseCategory`, `TopUpSource` мають `String`-значення). Невідома категорія з бази стає `.untracked`, невідоме джерело — `.atm`, тож запис не губиться.
+- Ціна такого підходу — мапінг в обидва боки (`Persistence/EntityMapping.swift`: `toDomain()` і `update(from:)`).
+
+### Як працює `SwiftDataWalletRepository`
+
+- **Запуск.** Один раз читає `WalletEntity`, відсортовані за `sortIndex`, перетворює на `CashWallet` і тримає їх у пам'яті. `wallets()` повертає ті самі екземпляри, тому спільний стан між екранами працює як раніше (`@Observable`).
+- **Зміни.** ViewModel, як і раніше, змінюють `CashWallet` і викликають `repository.save(wallet)`. Репозиторій синхронізує весь гаманець за `id` (нові записи додає, змінені оновлює, зниклі видаляє) і одразу викликає `context.save()` (автозбереження вимкнене). Якщо одне збереження не вдалося, наступне вдале запише й попередні зміни.
+- **Видалення гаманця.** `remove(id:)` видаляє `WalletEntity`, а його витрати, поповнення і звірку прибирає каскадне правило.
+- **Порядок.** `move(fromOffsets:toOffset:)` переставляє гаманці в пам'яті й перезаписує `sortIndex` усім. Новий гаманець отримує найбільший `sortIndex + 1`.
+- **Помилки.** `save`, `remove` і `move` у протоколі стали `throws`. Якщо `context.save()` падає, репозиторій робить `rollback()` і кидає `RepositoryError.saveFailed`. ViewModel показує «Не вдалося зберегти зміни на пристрої. Спробуйте ще раз» тим самим полем `errorMessage`, що й для помилок валідації (`WalletError.message(for:fallback:)`), тож застосунок не падає. Якщо сховище не відкрилося при запуску, `SaifuApp` переходить на сховище в пам'яті, а `RootView` один раз показує попередження.
+- Контейнер створює `SaifuMigrationPlan.makeContainer(inMemory:)`. Репозиторій тримає посилання на `ModelContainer`, бо `ModelContext` його не утримує.
+
+### Міграції
+
+`SaifuSchemaV1` (версія 1.0.0) містить усі чотири сутності, а `SaifuMigrationPlan` перелічує версії схеми. Псевдоніми `WalletEntity = SaifuSchemaV1.WalletEntity` тощо дозволяють решті коду не знати номер версії. Щоб змінити модель: скопіювати сутності в `SaifuSchemaV2`, додати її в `schemas`, додати `MigrationStage.lightweight` (або `.custom` для перетворення даних) у `stages` і перевести псевдоніми на V2.
+
+### Як підміняється репозиторій
+
+| Де | Репозиторій | Дані |
+|---|---|---|
+| Звичайний запуск (Debug і Release) | `SwiftDataWalletRepository` з контейнером на диску | збережені; перший запуск порожній |
+| Debug з аргументом `-uiScreen` (скриншоти) | `DemoWalletRepository` | демо-сценарій у пам'яті, диск не змінюється |
+| `#Preview` (`ScreenFactory.preview()`) | `DemoWalletRepository` | демо-сценарій |
+| Сховище не відкрилося | `SwiftDataWalletRepository` з контейнером у пам'яті | порожньо, з попередженням |
+
+Вибір зроблено в одному місці, `SaifuApp.makeRepository()`. ViewModel отримують лише протокол.
+
+### Перший запуск
+
+Без гаманців головний екран показує порожній стан із кнопкою «Створити перший гаманець». Вона відкриває наявну форму нового гаманця в sheet «Гаманці» (`WalletViewModel.createFirstWalletTapped()`). В аналітиці замість меню гаманця й періодів з'являється «Створіть гаманець, щоб бачити аналітику». Список витрат без гаманця не відкривається, а порожній гаманець показує «Витрат немає».
 
 ## Патерни
 
@@ -192,14 +254,17 @@ View не знають про репозиторій, стратегію, кур
 
 Усі залежності обираються в `Saifu/App/SaifuApp.swift`.
 
-**Репозиторій.** Демо-дані замість порожнього старту (або навпаки):
+**Репозиторій.** Обирається в `SaifuApp.makeRepository()`:
 
 ```swift
-// порожній старт
-ScreenFactory(repository: InMemoryWalletRepository(), ...)
+// збереження на диску (звичайний запуск)
+SwiftDataWalletRepository(container: try SaifuMigrationPlan.makeContainer(inMemory: false))
 
-// дані демо-сценарію (гаманці JPY і UAH)
-ScreenFactory(repository: DemoWalletRepository(), ...)
+// лише в пам'яті, порожній старт
+InMemoryWalletRepository()
+
+// дані демо-сценарію (гаманці JPY і UAH); так працюють #Preview і -uiScreen
+DemoWalletRepository()
 ```
 
 **Джерело курсів.** Достатньо написати тип, що реалізує `NBURecordSource`, і підставити його в адаптер:
@@ -225,7 +290,8 @@ rateProvider: NBURateAdapter(source: NBUAPIRecordSource())
 | Router | `AppRouter`, `AppTab`, `Route`, `Sheet`, `RootView` | Усі переходи в одному місці, View не керують навігацією |
 | Factory | `ScreenFactory` | Створення екранів і їхніх ViewModel із залежностей кореня |
 | Observer | `@Observable CashWallet` | Усі екрани бачать один стан гаманця |
-| Repository | `WalletRepository`, `InMemoryWalletRepository`, `DemoWalletRepository` | Джерело гаманців, яке можна підміняти |
+| Repository | `WalletRepository`, `SwiftDataWalletRepository`, `InMemoryWalletRepository`, `DemoWalletRepository` | Джерело гаманців, яке можна підміняти (диск, пам'ять, демо) |
+| Data Mapper | `Persistence/EntityMapping.swift` | Перетворення сутностей SwiftData ↔ доменні моделі |
 | Builder | `ExpenseBuilder` | Збирання і валідація `Expense` з введення форми |
 | Strategy | `CategorySuggestionStrategy`, `KeywordCategoryStrategy`, `LastUsedCategoryStrategy` | Взаємозамінні способи підказати категорію |
 | Composite (за роллю) | `ChainedCategoryStrategy` | Кілька стратегій як одна |
@@ -258,4 +324,4 @@ rateProvider: NBURateAdapter(source: NBUAPIRecordSource())
 - `CashWallet.formattedBalance` та `expenseSummaries()` повертають відформатовані рядки, тобто презентація лишилась у доменній моделі. Умова лаби 2 забороняє переписувати моделі, а ці методи документовані у README лаби 1 як демонстрація конструкцій Swift.
 - Цикл піднесення 10 до степеня `minorUnits` повторюється в `Currency.format`, `parseMinor` та `inputText`. Тепер усі три копії в одному типі.
 - `Date()` і `UUID()` використовуються як значення за замовчуванням у `Expense`, `CashTopUp`, `CashWallet` та `ExpenseBuilder`. Для тестів дату можна передати явно (`.date(_)`).
-- `CashWallet` є посилальним типом, тому `repository.save` у `InMemoryWalletRepository` лише закріплює вже внесену зміну. З реальним сховищем (лаба 4 і далі) цей виклик стане суттєвим.
+- `CashWallet` є посилальним типом, тому `repository.save` у `InMemoryWalletRepository` лише закріплює вже внесену зміну. У `SwiftDataWalletRepository` саме цей виклик записує зміну на диск.

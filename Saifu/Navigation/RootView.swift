@@ -5,10 +5,13 @@ import SwiftUI
 struct RootView: View {
     let factory: ScreenFactory
     @Bindable private var router: AppRouter
+    /// Попередження про сховище; після «Зрозуміло» більше не показується.
+    @State private var startupWarning: String?
 
     init(factory: ScreenFactory) {
         self.factory = factory
         router = factory.router
+        _startupWarning = State(initialValue: factory.startupWarning)
     }
 
     var body: some View {
@@ -21,6 +24,13 @@ struct RootView: View {
             }
             // Серію нагадувань «раз на 3 дні» поновлюємо при кожному запуску
             .task { await factory.appDidLaunch() }
+            .alert("Дані недоступні",
+                   isPresented: Binding(get: { startupWarning != nil },
+                                        set: { if !$0 { startupWarning = nil } })) {
+                Button("Зрозуміло", role: .cancel) {}
+            } message: {
+                Text(startupWarning ?? "")
+            }
     }
 
     @ViewBuilder

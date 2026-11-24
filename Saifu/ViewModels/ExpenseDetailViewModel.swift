@@ -72,7 +72,7 @@ final class ExpenseDetailViewModel {
                 .note(note)
                 .build()
             try wallet.updateExpense(updated)
-            repository.save(wallet)
+            try repository.save(wallet)
             errorMessage = nil
             router.pop()
         } catch {
@@ -84,7 +84,7 @@ final class ExpenseDetailViewModel {
         guard let wallet else { return }
         do {
             try wallet.removeExpense(id: expenseID)
-            repository.save(wallet)
+            try repository.save(wallet)
             errorMessage = nil
             router.pop()
         } catch {

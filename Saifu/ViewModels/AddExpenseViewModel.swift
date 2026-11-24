@@ -50,7 +50,7 @@ final class AddExpenseViewModel {
                 .note(note)
                 .build()
             try wallet.addExpense(expense)
-            repository.save(wallet)
+            try repository.save(wallet)
             if let note = expense.note {
                 categoryStrategy.learn(note: note, category: expense.category)
             }
