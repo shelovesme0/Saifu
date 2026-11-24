@@ -14,6 +14,8 @@ enum BackupError: Error, Equatable {
     case folderUnavailable
     /// Не вдалося зберегти копію поточних даних перед імпортом, тому імпорт скасовано.
     case preImportCopyFailed
+    /// Папка всередині контейнера застосунку: видаляється разом із ним.
+    case folderInsideApp
 }
 
 extension BackupError {
@@ -32,6 +34,8 @@ extension BackupError {
             return "Немає доступу до папки резервних копій"
         case .preImportCopyFailed:
             return "Не вдалося зберегти копію поточних даних, тому імпорт скасовано. Дані не змінено"
+        case .folderInsideApp:
+            return "Ця папка видаляється разом із застосунком. Оберіть iCloud Drive або іншу папку"
         }
     }
 

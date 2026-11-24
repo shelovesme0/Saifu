@@ -192,6 +192,8 @@ struct SettingsView: View {
             header("Резервна копія")
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
+                Text("Зберігайте копії в iCloud Drive, щоб вони пережили видалення застосунку")
+                    .foregroundStyle(Theme.secondaryText)
                 Text(backup.lastBackupText)
                     .foregroundStyle(Theme.secondaryText)
                 if let message = backup.message {

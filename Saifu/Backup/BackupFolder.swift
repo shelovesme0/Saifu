@@ -20,6 +20,29 @@ enum BackupFileName {
     }
 }
 
+/// Контейнер застосунку (зокрема «Файли → На iPhone → Saifu») видаляється разом із застосунком,
+/// тому копії там не переживуть видалення.
+enum AppContainer {
+    /// Чи лежить `url` усередині домашньої директорії застосунку.
+    static func contains(_ url: URL, home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> Bool {
+        let path = normalizedPath(url)
+        let homePath = normalizedPath(home)
+        return path == homePath || path.hasPrefix(homePath + "/")
+    }
+
+    /// Пікер може повернути `/private/var/...`, а домашня директорія — `/var/...`: це той самий шлях.
+    private static func normalizedPath(_ url: URL) -> String {
+        var path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        if path.hasPrefix("/private/") {
+            path.removeFirst("/private".count)
+        }
+        while path.count > 1 && path.hasSuffix("/") {
+            path.removeLast()
+        }
+        return path
+    }
+}
+
 /// Папка для автоматичних копій, яку один раз обрав користувач.
 protocol BackupFolderAccess {
     /// Чи обрано папку.

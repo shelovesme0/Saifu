@@ -119,6 +119,12 @@ final class BackupViewModel {
     }
 
     private func folderPicked(_ url: URL) {
+        // Копії в контейнері застосунку зникнуть разом із ним — таку папку не приймаємо
+        guard !AppContainer.contains(url) else {
+            message = Message(text: BackupError.folderInsideApp.userMessage, isError: true)
+            revertToggleIfNoFolder()
+            return
+        }
         do {
             try folder.setFolder(url)
             isFolderUnavailable = false
@@ -164,9 +170,14 @@ final class BackupViewModel {
     func exportFinished(_ result: Result<URL, any Error>) {
         exportDocument = nil
         switch result {
-        case .success:
+        case .success(let url):
             recordBackup(at: Date())
-            message = Message(text: "Копію експортовано", isError: false)
+            if AppContainer.contains(url) {
+                message = Message(text: "Копію експортовано, але " + BackupError.folderInsideApp.userMessage.lowercasedFirst,
+                                  isError: true)
+            } else {
+                message = Message(text: "Копію експортовано", isError: false)
+            }
         case .failure(let error):
             // Скасування користувачем — не помилка
             if (error as? CocoaError)?.code == .userCancelled { return }
@@ -187,10 +198,7 @@ final class BackupViewModel {
         case (.folder, .success(let url)):
             folderPicked(url)
         case (.folder, .failure):
-            // Пікер закрито без вибору: без папки автокопія не вмикається
-            if !folder.isConfigured || !defaults.bool(forKey: Keys.autoBackupEnabled) {
-                isAutoBackupEnabled = false
-            }
+            revertToggleIfNoFolder()
         case (.backupFile, .success(let url)):
             fileToImportPicked(url)
         case (.backupFile, .failure):
@@ -247,6 +255,14 @@ final class BackupViewModel {
 
     // MARK: - Допоміжне
 
+    /// Папку не обрано (пікер закрито чи папку відхилено): без папки автокопія не вмикається.
+    /// Якщо раніше обрана папка вже працює, вона лишається.
+    private func revertToggleIfNoFolder() {
+        if !folder.isConfigured || !defaults.bool(forKey: Keys.autoBackupEnabled) {
+            isAutoBackupEnabled = false
+        }
+    }
+
     private func presentPicker(_ mode: PickerMode) {
         pickerMode = mode
         isPickerPresented = true
@@ -255,5 +271,12 @@ final class BackupViewModel {
     private func recordBackup(at date: Date) {
         lastBackupDate = date
         defaults.set(date, forKey: Keys.lastBackupDate)
+    }
+}
+
+private extension String {
+    /// "Ця папка…" → "ця папка…" для вставки всередину речення.
+    var lowercasedFirst: String {
+        prefix(1).lowercased() + dropFirst()
     }
 }
