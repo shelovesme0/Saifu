@@ -4,6 +4,7 @@
 Практична робота 3: екрани у трьох вкладках (`TabView`), навігація через `AppRouter`, спільний стан між екранами, темний дизайн (`Theme`). Карта переходів, анімації та сценарій проходження: [navigation.md](navigation.md).
 Збереження даних між запусками: SwiftData за протоколом `WalletRepository` (розділ [«Збереження даних»](#збереження-даних)).
 Практична робота 4: курси з API НБУ через мережевий шар `Networking/`, стани завантаження в UI, кеш на день (розділ [«Мережевий шар»](#мережевий-шар), детально: [api.md](api.md)).
+Поза лабами: резервна копія в JSON, автоматична копія в обрану папку (розділ [«Резервна копія»](#резервна-копія), детально: [backup.md](backup.md)).
 
 ## Чому MVVM
 
@@ -22,7 +23,7 @@ graph TD
     Router["AppRouter<br/>(вкладка, path для кожної, sheet)"]
     Root["RootView<br/>(TabView: 3 × NavigationStack + sheet)"]
     Views["WalletView · ExpenseListView · ExpenseDetailView · ReconcileView<br/>AnalyticsView · AnalyticsPeriodView · SettingsView<br/>WalletsView · WalletFormView"]
-    VMs["WalletViewModel · AddExpenseViewModel · ExpenseListViewModel<br/>ExpenseDetailViewModel · ReconcileViewModel<br/>AnalyticsViewModel · SettingsViewModel<br/>WalletsViewModel · WalletFormViewModel"]
+    VMs["WalletViewModel · AddExpenseViewModel · ExpenseListViewModel<br/>ExpenseDetailViewModel · ReconcileViewModel<br/>AnalyticsViewModel · SettingsViewModel · BackupViewModel<br/>WalletsViewModel · WalletFormViewModel"]
     Shared["AppSettings (домашня валюта)<br/>CurrencyConverter (крос-курс)"]
     Remind["ReminderScheduling<br/>(protocol)"]
     LocalRemind["LocalReminderScheduler"]
@@ -46,6 +47,10 @@ graph TD
     Mock["MockRecordSource · SwitchableRecordSource<br/>(лише Debug)"]
     HTTP["HTTPClient<br/>(protocol)"]
     URLS["URLSessionHTTPClient"]
+    Backup["BackupService<br/>(protocol)"]
+    JSONBackup["JSONBackupService<br/>(BackupFileDTO, формат v1)"]
+    Folder["BackupFolderAccess<br/>(protocol)"]
+    Bookmark["BookmarkBackupFolder<br/>(security-scoped bookmark)"]
 
     App -->|створює| Factory
     App -->|створює| Router
@@ -87,9 +92,14 @@ graph TD
     Cache --> Source
     Remote --> HTTP
     URLS -.реалізує.-> HTTP
+    VMs --> Backup
+    VMs --> Folder
+    JSONBackup -.реалізує.-> Backup
+    JSONBackup --> Repo
+    Bookmark -.реалізує.-> Folder
 ```
 
-View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`SwiftDataWalletRepository` або `DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `CachedRecordSource`, `NBURemoteRecordSource`, `URLSessionHTTPClient`, `LocalReminderScheduler`, `AppRouter`) створюються тільки в `SaifuApp`. `ScreenFactory` отримує їх через `init` і збирає з них екрани.
+View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`SwiftDataWalletRepository` або `DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `CachedRecordSource`, `NBURemoteRecordSource`, `URLSessionHTTPClient`, `LocalReminderScheduler`, `BookmarkBackupFolder`, `AppRouter`) створюються тільки в `SaifuApp` (`JSONBackupService` — у `ScreenFactory` з того самого репозиторію). `ScreenFactory` отримує їх через `init` і збирає з них екрани.
 
 ## Навігація: `AppRouter`
 
@@ -306,6 +316,16 @@ NBURateAdapter(source: DemoNBURecordSource())
 
 Endpoint, реальні відповіді й покрокова перевірка всіх станів: [api.md](api.md).
 
+## Резервна копія
+
+- **Формат окремо від домену.** Файл описують Codable-DTO з полем `formatVersion` (`Backup/BackupDTO.swift`). Доменні моделі не стали `Codable`, тож їх можна змінювати, не ламаючи старі копії. Це той самий підхід, що й з окремими сутностями SwiftData.
+- **Сервіс за протоколом.** `BackupViewModel` знає лише `BackupService` (експорт, відбиток, перевірка, відновлення) і `BackupFolderAccess` (папка автокопій). Формат JSON і bookmark-и сховані в `JSONBackupService` і `BookmarkBackupFolder`.
+- **Атомарна заміна.** Новий метод `WalletRepository.replaceAll(with:)`. У SwiftData це одна транзакція: при помилці контекст відкочується, і масив у пам'яті не змінюється. Перед заміною зберігається копія поточних даних.
+- **Оновлення екранів.** Заміна масиву в `@Observable` репозиторії оновлює кореневі екрани. Екрани, що тримали старі екземпляри `CashWallet`, закриваються через `AppRouter.resetNavigation()`, а `WalletViewModel.dataReplaced()` скидає кеш форм додавання.
+- **Коли пишеться автокопія.** Декоратор `ChangeNotifyingWalletRepository` повідомляє `BackupViewModel` про кожну зміну даних. `Saifu-latest.json` пишеться з дебаунсом ~3 с і лише якщо SHA-256 даних змінився. Файлові операції йдуть у фоновому завданні, щоб не блокувати UI. При `scenePhase == .background` незаписані зміни пишуться одразу (`ScreenFactory.appDidEnterBackground()` з `beginBackgroundTask`). Щоденні знімки створюються не частіше одного на день, лишаються 7 найновіших.
+
+Формат, правила перевірки, ротація й покрокова перевірка: [backup.md](backup.md).
+
 ## Таблиця: патерн / принцип, компонент, призначення
 
 | Патерн / принцип | Компонент | Призначення |
@@ -322,6 +342,9 @@ Endpoint, реальні відповіді й покрокова перевір
 | Adapter | `NBURateAdapter` | Формат НБУ → `ExchangeRate` |
 | Decorator | `CachedRecordSource` | Кеш на день поверх будь-якого `NBURecordSource` |
 | Service за протоколом | `ReminderScheduling`, `LocalReminderScheduler` | Нагадування про звірку, підміна в превʼю |
+| Service за протоколом | `BackupService`, `JSONBackupService`, `BackupFolderAccess`, `BookmarkBackupFolder` | Резервна копія: формат і папка приховані від ViewModel |
+| Decorator | `ChangeNotifyingWalletRepository` | Повідомлення про зміни даних для автокопії поверх будь-якого репозиторію |
+| DTO | `Backup/BackupDTO.swift` | Версійований формат файлу копії окремо від моделей |
 | Спільний стан | `AppSettings`, `CurrencyConverter` | Домашня валюта і крос-курс для всіх екранів |
 | Composition root | `SaifuApp` | Єдине місце створення залежностей |
 | S | `ExpenseBuilder`, `NBURateAdapter`, `EntryRow` | Кожен тип має одну задачу |

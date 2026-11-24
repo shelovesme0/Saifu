@@ -91,4 +91,13 @@ final class AppRouter {
         sheet = nil
         walletsPath = []
     }
+
+    /// Після імпорту копії: закриває sheet і всі відкриті екрани, бо вони тримали старі гаманці.
+    /// Вкладка лишається тією самою.
+    func resetNavigation() {
+        dismissSheet()
+        homePath = []
+        analyticsPath = []
+        settingsPath = []
+    }
 }

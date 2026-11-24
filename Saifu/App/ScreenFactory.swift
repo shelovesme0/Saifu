@@ -8,6 +8,7 @@ final class ScreenFactory {
     let walletViewModel: WalletViewModel
     let analyticsViewModel: AnalyticsViewModel
     let settingsViewModel: SettingsViewModel
+    let backupViewModel: BackupViewModel
     private let repository: WalletRepository
     private let converter: CurrencyConverter
     /// Попередження при запуску (сховище не відкрилося); показується один раз.
@@ -18,10 +19,15 @@ final class ScreenFactory {
          rateProvider: any ExchangeRateProvider,
          rateCache: (any RateCacheInvalidating)? = nil,
          reminderScheduler: any ReminderScheduling,
+         backupFolder: any BackupFolderAccess,
+         localBackupDirectory: URL,
          defaults: UserDefaults,
          appVersion: String,
          router: AppRouter,
          startupWarning: String? = nil) {
+        // Усі екрани працюють через декоратор, тож автокопія дізнається про кожну зміну даних
+        let notifyingRepository = ChangeNotifyingWalletRepository(inner: repository)
+        let repository: WalletRepository = notifyingRepository
         self.repository = repository
         self.router = router
         self.startupWarning = startupWarning
@@ -52,6 +58,35 @@ final class ScreenFactory {
             defaults: defaults,
             appVersion: appVersion
         )
+        // Після імпорту оновлюються екрани, що тримали старі екземпляри гаманців
+        let walletViewModel = walletViewModel
+        let analyticsViewModel = analyticsViewModel
+        backupViewModel = BackupViewModel(
+            service: JSONBackupService(repository: repository, appVersion: appVersion),
+            folder: backupFolder,
+            defaults: defaults,
+            localDirectory: localBackupDirectory,
+            onDataReplaced: {
+                router.resetNavigation()
+                walletViewModel.dataReplaced()
+                analyticsViewModel.dataReplaced()
+            }
+        )
+        let backupViewModel = backupViewModel
+        notifyingRepository.onChange = { [weak backupViewModel] in
+            backupViewModel?.dataChanged()
+        }
+    }
+
+    /// Вихід у фон: незаписані зміни автокопії пишуться одразу.
+    /// Фонове завдання не дає iOS призупинити застосунок посеред запису файлу.
+    func appDidEnterBackground() {
+        let backgroundTask = BackgroundTask(name: "Saifu backup")
+        let backupViewModel = backupViewModel
+        Task {
+            await backupViewModel.appDidEnterBackground()
+            backgroundTask.end()
+        }
     }
 
     /// Курси на сьогодні: при запуску й поверненні на передній план (за той самий день — без запиту).
@@ -78,7 +113,7 @@ final class ScreenFactory {
     }
 
     func settingsView() -> some View {
-        SettingsView(viewModel: settingsViewModel)
+        SettingsView(viewModel: settingsViewModel, backup: backupViewModel)
     }
 
     // MARK: - Sheet «Гаманці»
@@ -136,6 +171,23 @@ final class ScreenFactory {
     }
 }
 
+/// Обгортка над `beginBackgroundTask`: завершується або після роботи, або коли iOS вичерпала час.
+private final class BackgroundTask {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
+    }
+}
+
 // Не під #if DEBUG: #Preview компілюється і в Release, тому ці помічники потрібні в обох конфігураціях
 extension ScreenFactory {
     /// Залежності для #Preview (ті самі демо-дані, що й у застосунку; нагадування не плануються).
@@ -148,6 +200,8 @@ extension ScreenFactory {
             ]),
             rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
             reminderScheduler: PreviewReminderScheduler(),
+            backupFolder: BookmarkBackupFolder(defaults: UserDefaults(suiteName: "saifu.preview") ?? .standard),
+            localBackupDirectory: FileManager.default.temporaryDirectory,
             defaults: UserDefaults(suiteName: "saifu.preview") ?? .standard,
             appVersion: "1.0 (preview)",
             router: AppRouter()

@@ -24,4 +24,8 @@ final class DemoWalletRepository: WalletRepository {
     func move(fromOffsets source: IndexSet, toOffset destination: Int) {
         inner.move(fromOffsets: source, toOffset: destination)
     }
+
+    func replaceAll(with wallets: [CashWallet]) {
+        inner.replaceAll(with: wallets)
+    }
 }

@@ -31,6 +31,10 @@ struct RootView: View {
                 if phase == .active {
                     Task { await factory.loadRatesIfNeeded() }
                 }
+                // Автоматична резервна копія, якщо є незбережені зміни
+                if phase == .background {
+                    factory.appDidEnterBackground()
+                }
             }
             .alert("Дані недоступні",
                    isPresented: Binding(get: { startupWarning != nil },

@@ -67,6 +67,30 @@ final class SwiftDataWalletRepository: WalletRepository {
         try commit()
     }
 
+    func replaceAll(with wallets: [CashWallet]) throws {
+        // Видаляємо всі сутності (а не лише відомі), щоб у сховищі не лишилося нічого зі старих даних
+        let stored = (try? context.fetch(FetchDescriptor<WalletEntity>())) ?? []
+        for entity in stored {
+            context.delete(entity)
+        }
+        var newEntities: [CashWallet.ID: WalletEntity] = [:]
+        for (index, wallet) in wallets.enumerated() {
+            let entity = WalletEntity(id: wallet.id,
+                                      name: wallet.name,
+                                      currencyRaw: wallet.currency.rawValue,
+                                      sortIndex: index)
+            context.insert(entity)
+            entity.expenses = wallet.expenses.map { ExpenseEntity($0) }
+            entity.topUps = wallet.topUps.map { TopUpEntity($0) }
+            entity.lastReconciliation = wallet.lastReconciliation.map { ReconciliationEntity($0) }
+            newEntities[wallet.id] = entity
+        }
+        // Пам'ять оновлюємо лише після успішного запису: при помилці commit() відкотить контекст
+        try commit()
+        entities = newEntities
+        storage = wallets
+    }
+
     // MARK: - Сховище
 
     private func insertEntity(for wallet: CashWallet) -> WalletEntity {

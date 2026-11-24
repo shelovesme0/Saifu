@@ -106,6 +106,11 @@ final class AnalyticsViewModel {
         selectedWalletID = id
     }
 
+    /// Після імпорту копії — перший гаманець.
+    func dataReplaced() {
+        selectedWalletID = wallets.first?.id
+    }
+
     // MARK: - Період
 
     /// Вибір чипа: «Період…» відкриває sheet, решта застосовується одразу.
