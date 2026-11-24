@@ -40,6 +40,8 @@ struct ExpenseDetailView: View {
         .scrollDismissesKeyboard(.interactively)
         .themedScreen()
         .toolbar(.hidden, for: .navigationBar)
+        // Вкладений екран: панель вкладок ховаємо
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private var form: some View {

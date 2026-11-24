@@ -56,6 +56,8 @@ struct ExpenseListView: View {
         .animation(.snappy, value: viewModel.sections)
         .themedScreen()
         .toolbar(.hidden, for: .navigationBar)
+        // Вкладений екран: панель вкладок ховаємо
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private var totalCard: some View {
