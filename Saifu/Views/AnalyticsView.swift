@@ -112,6 +112,16 @@ struct AnalyticsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if let converted = viewModel.convertedTotalText {
                     infoBlock(caption: viewModel.convertedCaption, value: converted)
+                } else if let rateState = viewModel.rateState {
+                    // Курсу ще немає: завантаження або помилка з «Повторити»
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(viewModel.convertedCaption)
+                            .font(Theme.captionFont)
+                            .foregroundStyle(Theme.secondaryText)
+                        RateStatusView(state: rateState, compact: true) {
+                            viewModel.retryRatesTapped()
+                        }
+                    }
                 }
                 if let top = viewModel.topCategory {
                     VStack(alignment: .leading, spacing: 4) {

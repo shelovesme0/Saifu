@@ -9,12 +9,14 @@ final class ScreenFactory {
     let analyticsViewModel: AnalyticsViewModel
     let settingsViewModel: SettingsViewModel
     private let repository: WalletRepository
+    private let converter: CurrencyConverter
     /// Попередження при запуску (сховище не відкрилося); показується один раз.
     let startupWarning: String?
 
     init(repository: WalletRepository,
          categoryStrategy: any CategorySuggestionStrategy,
          rateProvider: any ExchangeRateProvider,
+         rateCache: (any RateCacheInvalidating)? = nil,
          reminderScheduler: any ReminderScheduling,
          defaults: UserDefaults,
          appVersion: String,
@@ -25,7 +27,8 @@ final class ScreenFactory {
         self.startupWarning = startupWarning
         // Спільні для кількох екранів: домашня валюта і перерахунок курсів
         let settings = AppSettings(defaults: defaults)
-        let converter = CurrencyConverter(rateProvider: rateProvider)
+        let converter = CurrencyConverter(rateProvider: rateProvider, cache: rateCache)
+        self.converter = converter
         walletViewModel = WalletViewModel(
             repository: repository,
             converter: converter,
@@ -43,11 +46,17 @@ final class ScreenFactory {
         )
         settingsViewModel = SettingsViewModel(
             settings: settings,
+            converter: converter,
             router: router,
             scheduler: reminderScheduler,
             defaults: defaults,
             appVersion: appVersion
         )
+    }
+
+    /// Курси на сьогодні: при запуску й поверненні на передній план (за той самий день — без запиту).
+    func loadRatesIfNeeded() async {
+        await converter.loadIfNeeded()
     }
 
     /// Дії при запуску застосунку (переплановування нагадувань).

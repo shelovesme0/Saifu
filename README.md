@@ -132,7 +132,7 @@ Saifu — iOS-застосунок для обліку готівкових ви
 
 Схема компонентів, опис патернів, SOLID, антипатерни (було → стало) та інструкція зі заміни джерел даних: [docs/architecture.md](docs/architecture.md).
 
-Курси валют у `DemoNBURecordSource` ілюстративні, реальні з'являться в лабі 4.
+Курси валют тоді бралися з `DemoNBURecordSource` (ілюстративні). У лабі 4 їх замінили реальні курси НБУ.
 
 ## Практична робота 3: екрани й навігація
 
@@ -161,6 +161,22 @@ Saifu — iOS-застосунок для обліку готівкових ви
 - **Почати з нуля на симуляторі:** видалити застосунок або `xcrun simctl uninstall booted com.vitaliilazariev.Saifu`.
 
 Чому SwiftData, чому окремі сутності й як підміняється репозиторій: [docs/architecture.md](docs/architecture.md#збереження-даних).
+
+## Практична робота 4: взаємодія із сервером
+
+Курси валют для «≈ …» у домашній валюті тепер надходять з відкритого API НБУ (`GET https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=<CODE>&json`, без авторизації).
+
+- **Мережевий шар** (`Saifu/Networking/`): `HTTPClient` і `URLSessionHTTPClient` на async/await, `NetworkError` (`transport`, `badStatus`, `decoding`, `empty`). Статус відповіді перевіряється до декодування. View і ViewModel мережу не викликають.
+- **Дані:** `NBURateDTO` → `NBURecord` → `NBURateAdapter` (не змінювався) → `ExchangeRate`. `NBURemoteRecordSource` замінив `DemoNBURecordSource`, який лишився для `#Preview`.
+- **Стани в UI:** `LoadState` (`idle`, `loading`, `loaded`, `empty`, `failed`). На картці гаманця під час завантаження показується `ProgressView`, під картками — курс із датою НБУ або повідомлення про помилку з кнопкою «Повторити». Те саме в аналітиці.
+- **Кеш:** курс на день запитується один раз (3 запити: JPY, USD, EUR). Свайпи й вкладки мережу не чіпають. Pull-to-refresh на головній завантажує курс наново.
+- **Debug:** налаштування → «Розробка» → «Джерело курсів»: реальне API або mock-режими (успіх, порожньо, немає мережі, помилка сервера, неправильний формат, повільно). Аргумент запуску `-rateSource <режим>` робить те саме. У Release перемикача немає.
+
+| Курс завантажено | Завантаження | Немає мережі | Аналітика: помилка сервера |
+|---|---|---|---|
+| ![](docs/screenshots/rates-loaded.png) | ![](docs/screenshots/rates-loading.png) | ![](docs/screenshots/rates-transport.png) | ![](docs/screenshots/rates-analytics-badstatus.png) |
+
+Endpoint, параметри, реальні відповіді, схема мережевого шару й покрокова перевірка кожного стану: [docs/api.md](docs/api.md). Оновлена архітектура: [docs/architecture.md](docs/architecture.md#мережевий-шар).
 
 ## Внесок учасників
 

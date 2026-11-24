@@ -3,6 +3,7 @@
 Практична робота 2: MVVM, патерни Builder / Strategy / Adapter, принципи SOLID.
 Практична робота 3: екрани у трьох вкладках (`TabView`), навігація через `AppRouter`, спільний стан між екранами, темний дизайн (`Theme`). Карта переходів, анімації та сценарій проходження: [navigation.md](navigation.md).
 Збереження даних між запусками: SwiftData за протоколом `WalletRepository` (розділ [«Збереження даних»](#збереження-даних)).
+Практична робота 4: курси з API НБУ через мережевий шар `Networking/`, стани завантаження в UI, кеш на день (розділ [«Мережевий шар»](#мережевий-шар), детально: [api.md](api.md)).
 
 ## Чому MVVM
 
@@ -39,7 +40,12 @@ graph TD
     Last["LastUsedCategoryStrategy"]
     Adapter["NBURateAdapter"]
     Source["NBURecordSource<br/>(protocol)"]
-    DemoSrc["DemoNBURecordSource"]
+    DemoSrc["DemoNBURecordSource<br/>(#Preview)"]
+    Cache["CachedRecordSource<br/>(кеш на день)"]
+    Remote["NBURemoteRecordSource"]
+    Mock["MockRecordSource · SwitchableRecordSource<br/>(лише Debug)"]
+    HTTP["HTTPClient<br/>(protocol)"]
+    URLS["URLSessionHTTPClient"]
 
     App -->|створює| Factory
     App -->|створює| Router
@@ -75,9 +81,15 @@ graph TD
     Adapter -.реалізує.-> Rate
     Adapter --> Source
     DemoSrc -.реалізує.-> Source
+    Cache -.реалізує.-> Source
+    Remote -.реалізує.-> Source
+    Mock -.реалізує.-> Source
+    Cache --> Source
+    Remote --> HTTP
+    URLS -.реалізує.-> HTTP
 ```
 
-View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`SwiftDataWalletRepository` або `DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `DemoNBURecordSource`, `LocalReminderScheduler`, `AppRouter`) створюються тільки в `SaifuApp`. `ScreenFactory` отримує їх через `init` і збирає з них екрани.
+View не знають про репозиторій, стратегію, курси й роутер. Усе це доступно лише через їхні ViewModel. Конкретні типи (`SwiftDataWalletRepository` або `DemoWalletRepository`, `ChainedCategoryStrategy`, `NBURateAdapter`, `CachedRecordSource`, `NBURemoteRecordSource`, `URLSessionHTTPClient`, `LocalReminderScheduler`, `AppRouter`) створюються тільки в `SaifuApp`. `ScreenFactory` отримує їх через `init` і збирає з них екрани.
 
 ## Навігація: `AppRouter`
 
@@ -118,7 +130,7 @@ View не знають про репозиторій, стратегію, кур
 - `InMemoryWalletRepository` позначено `@Observable` і має `remove(id:)` та `move(fromOffsets:toOffset:)` (порядок карток). ViewModel читають `repository.wallets()` щоразу, а не копіюють масив в `init`, тому гаманець, доданий, видалений чи переставлений у sheet «Гаманці», одразу з'являється в тому ж порядку у свайп-картках і в меню аналітики.
 - У `CashWallet` назва стала змінною, а валюту змінює `changeCurrency(to:)`, лише поки в гаманці немає записів (інакше `WalletError.walletNotEmpty`), бо суми не перераховуються.
 - Домашня валюта зберігається в `AppSettings` (`@Observable`, ключ `homeCurrency` у `UserDefaults`, за замовчуванням UAH). `@AppStorage` тут не підходить: його бачать лише View, а «≈ …» рахують ViewModel. Зміна валюти в налаштуваннях одразу перераховує всі екрани.
-- `CurrencyConverter` один раз завантажує курси всіх валют через `ExchangeRateProvider` і перераховує суму крос-курсом через гривню (`ExchangeRate.toUAHMinor` / `fromUAHMinor`, `Decimal` без `Double`). Якщо валюта гаманця збігається з домашньою, рядок «≈» не показується.
+- `CurrencyConverter` завантажує курси всіх валют через `ExchangeRateProvider` (при запуску й поверненні на передній план, не частіше разу на день) і перераховує суму крос-курсом через гривню (`ExchangeRate.toUAHMinor` / `fromUAHMinor`, `Decimal` без `Double`). Він же тримає `state: LoadState`, тож головна й аналітика однаково показують завантаження чи помилку. Якщо валюта гаманця збігається з домашньою, рядок «≈» і стан курсу не показуються.
 - `AnalyticsViewModel` рахує підсумки за період через `CashWallet.totalsByCategory(in: Range<Date>?)`. Необов'язковий діапазон — єдина зміна моделі в редизайні; без нього метод поводиться як раніше. Власний період задається в sheet двома датами з перевіркою «з ≤ по».
 - Для редагування до `CashWallet` додано `updateExpense(_:)` і `removeExpense(id:)`. Вони мають ті самі перевірки, що й `addExpense`: `negativeAmount`, а для відсутньої витрати новий `WalletError.expenseNotFound`. Гаманець отримав `id`, і `InMemoryWalletRepository.save` шукає за ним, а не за `name`.
 
@@ -209,11 +221,12 @@ View не знають про репозиторій, стратегію, кур
   - `ExchangeRateProvider` — цільовий інтерфейс, його використовує `WalletViewModel`.
   - `NBURecord` — формат, що адаптується.
   - `NBURateAdapter` — адаптер. Невідомий код валюти або дата, що не розбирається, дають `nil`.
-  - `NBURecordSource` — джерело записів, `DemoNBURecordSource` — його демо-реалізація.
+  - `NBURecordSource` — джерело записів: `NBURemoteRecordSource` (API НБУ), `CachedRecordSource` (декоратор із кешем на день), `DemoNBURecordSource` (#Preview), `MockRecordSource` (Debug).
+  - `NBURateDTO` — формат JSON-відповіді, перетворюється на `NBURecord`.
 - **Конвертація.** `ExchangeRate.toUAHMinor` рахує через `Decimal`, без `Double`.
 - **Файли.** `Saifu/ExchangeRates/*.swift`.
 
-> **Примітка.** Курси в `DemoNBURecordSource` ілюстративні. Реальні дані з API НБУ з'являться в лабі 4.
+У лабі 4 адаптер не змінювався: мережа з'явилася як нова реалізація `NBURecordSource`, яку `SaifuApp` підставляє замість демо-джерела.
 
 ## SOLID у Saifu
 
@@ -267,20 +280,31 @@ InMemoryWalletRepository()
 DemoWalletRepository()
 ```
 
-**Джерело курсів.** Достатньо написати тип, що реалізує `NBURecordSource`, і підставити його в адаптер:
+**Джерело курсів.** Обирається в `SaifuApp.makeRateSource()`; будь-який `NBURecordSource` підставляється в адаптер:
 
 ```swift
-struct NBUAPIRecordSource: NBURecordSource {
-    func records() async throws -> [NBURecord] {
-        // запит до API НБУ і декодування [NBURecord]
-    }
-}
+// API НБУ з кешем на день (Release)
+let source = CachedRecordSource(source: NBURemoteRecordSource(client: URLSessionHTTPClient()))
+rateProvider: NBURateAdapter(source: source), rateCache: source
 
-// SaifuApp
-rateProvider: NBURateAdapter(source: NBUAPIRecordSource())
+// Debug: між кешем і мережею перемикач «Реальне API / режими mock»
+CachedRecordSource(source: SwitchableRecordSource(live: remote, defaults: .standard))
+
+// #Preview: демо-курси без мережі
+NBURateAdapter(source: DemoNBURecordSource())
 ```
 
-`NBURecord` уже `Decodable`, а `ExchangeRateProvider` вже асинхронний, тому `WalletViewModel` лишається без змін.
+Так і відбувся перехід на реальні дані в лабі 4: `ExchangeRateProvider` від початку асинхронний, тому `NBURateAdapter` і ViewModel не довелося переписувати під мережу.
+
+## Мережевий шар
+
+- **Де мережа.** URLSession використовується лише в `Saifu/Networking/URLSessionHTTPClient.swift`. `NBURemoteRecordSource` знає тільки протокол `HTTPClient`, View і ViewModel не знають навіть його.
+- **Помилки.** `NetworkError`: `transport(URLError)`, `badStatus(Int)`, `decoding(Error)`, `empty`. Статус `HTTPURLResponse` перевіряється до декодування. Тексти для користувача — в `ViewModels/NetworkError+Message.swift`, окремо від мережевого шару.
+- **Стан у UI.** `LoadState` (`idle`, `loading`, `loaded`, `empty`, `failed(message)`) живе в `CurrencyConverter` (`@MainActor`), показується компонентом `RateStatusView` на головній і в аналітиці.
+- **Потоки.** Запит виконує URLSession поза головним потоком; `await` лише чекає на результат, тож свайпи й введення працюють під час завантаження. Стан змінюється на головному акторі.
+- **Кеш.** `CachedRecordSource` зберігає записи на поточний день (київський час) і об'єднує одночасні запити в одне завантаження. Скидається pull-to-refresh, «Повторити» і зміною джерела в Debug.
+
+Endpoint, реальні відповіді й покрокова перевірка всіх станів: [api.md](api.md).
 
 ## Таблиця: патерн / принцип, компонент, призначення
 
@@ -296,13 +320,14 @@ rateProvider: NBURateAdapter(source: NBUAPIRecordSource())
 | Strategy | `CategorySuggestionStrategy`, `KeywordCategoryStrategy`, `LastUsedCategoryStrategy` | Взаємозамінні способи підказати категорію |
 | Composite (за роллю) | `ChainedCategoryStrategy` | Кілька стратегій як одна |
 | Adapter | `NBURateAdapter` | Формат НБУ → `ExchangeRate` |
+| Decorator | `CachedRecordSource` | Кеш на день поверх будь-якого `NBURecordSource` |
 | Service за протоколом | `ReminderScheduling`, `LocalReminderScheduler` | Нагадування про звірку, підміна в превʼю |
 | Спільний стан | `AppSettings`, `CurrencyConverter` | Домашня валюта і крос-курс для всіх екранів |
 | Composition root | `SaifuApp` | Єдине місце створення залежностей |
 | S | `ExpenseBuilder`, `NBURateAdapter`, `EntryRow` | Кожен тип має одну задачу |
 | O | `CategoryDictionaries` | Новий словник без змін класів |
 | L | реалізації протоколів репозиторію, стратегії, курсів | Підстановка без змін ViewModel |
-| I | `NBURecordSource`, `learn` зі стандартною реалізацією | Вузькі інтерфейси |
+| I | `NBURecordSource`, `HTTPClient`, `RateCacheInvalidating`, `learn` зі стандартною реалізацією | Вузькі інтерфейси |
 | D | усі ViewModel | Залежність від протоколів, а не від конкретних типів |
 
 ## Антипатерни: було → стало

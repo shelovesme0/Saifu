@@ -7,6 +7,7 @@ struct RootView: View {
     @Bindable private var router: AppRouter
     /// Попередження про сховище; після «Зрозуміло» більше не показується.
     @State private var startupWarning: String?
+    @Environment(\.scenePhase) private var scenePhase
 
     init(factory: ScreenFactory) {
         self.factory = factory
@@ -24,6 +25,13 @@ struct RootView: View {
             }
             // Серію нагадувань «раз на 3 дні» поновлюємо при кожному запуску
             .task { await factory.appDidLaunch() }
+            // Курс НБУ: при запуску й поверненні на передній план; за той самий день — з кешу, без запиту
+            .task { await factory.loadRatesIfNeeded() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await factory.loadRatesIfNeeded() }
+                }
+            }
             .alert("Дані недоступні",
                    isPresented: Binding(get: { startupWarning != nil },
                                         set: { if !$0 { startupWarning = nil } })) {

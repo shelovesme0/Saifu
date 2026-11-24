@@ -13,13 +13,15 @@ struct SaifuApp: App {
     // Композиційний корінь: тут обирається репозиторій (makeRepository) і решта залежностей
     @State private var factory: ScreenFactory = {
         let storage = SaifuApp.makeRepository()
+        let rateCache = SaifuApp.makeRateSource()
         return ScreenFactory(
             repository: storage.repository,
             categoryStrategy: ChainedCategoryStrategy([
                 LastUsedCategoryStrategy(),
                 KeywordCategoryStrategy(dictionary: CategoryDictionaries.all)
             ]),
-            rateProvider: NBURateAdapter(source: DemoNBURecordSource()),
+            rateProvider: NBURateAdapter(source: rateCache),
+            rateCache: rateCache,
             reminderScheduler: LocalReminderScheduler(center: .current()),
             defaults: .standard,
             appVersion: SaifuApp.appVersion,
@@ -53,6 +55,23 @@ struct SaifuApp: App {
             }
             return (InMemoryWalletRepository(), warning)
         }
+    }
+
+    /// Курси НБУ з мережі з кешем на день.
+    /// Лише Debug: між кешем і мережею — перемикач джерела (налаштування → «Розробка» або `-rateSource <режим>`).
+    private static func makeRateSource() -> CachedRecordSource {
+        let remote = NBURemoteRecordSource(client: URLSessionHTTPClient())
+        #if DEBUG
+        let defaults = UserDefaults.standard
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "-rateSource"), index + 1 < arguments.count,
+           let mode = RateSourceMode(rawValue: arguments[index + 1]) {
+            defaults.set(mode.rawValue, forKey: RateSourceMode.defaultsKey)
+        }
+        return CachedRecordSource(source: SwitchableRecordSource(live: remote, defaults: defaults))
+        #else
+        return CachedRecordSource(source: remote)
+        #endif
     }
 
     /// "1.0 (1)" з Info.plist.
