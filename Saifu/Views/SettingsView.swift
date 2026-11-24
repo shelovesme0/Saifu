@@ -17,6 +17,9 @@ struct SettingsView: View {
             walletsSection
             currencySection
             reminderSection
+            #if DEBUG
+            developerSection
+            #endif
 
             Section(header: header("Про застосунок")) {
                 HStack {
@@ -121,6 +124,31 @@ struct SettingsView: View {
             }
         }
     }
+
+    #if DEBUG
+    /// Лише Debug: джерело курсів, щоб показати всі стани завантаження. У Release секції немає.
+    private var developerSection: some View {
+        Section {
+            Picker(selection: $viewModel.rateSourceMode) {
+                ForEach(RateSourceMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            } label: {
+                Label("Джерело курсів", systemImage: "antenna.radiowaves.left.and.right")
+                    .foregroundStyle(Theme.text)
+            }
+            .pickerStyle(.menu)
+            .tint(Theme.accent)
+            .listRowBackground(Theme.card)
+        } header: {
+            header("Розробка")
+        } footer: {
+            Text("Лише в Debug-збірці. Режими mock працюють без мережі; після вибору курс завантажується наново.")
+                .font(Theme.captionFont)
+                .foregroundStyle(Theme.secondaryText)
+        }
+    }
+    #endif
 
     /// Тумблер викликає ViewModel; вона сама вирішує, чи лишити його увімкненим (дозвіл).
     private var reminderBinding: Binding<Bool> {

@@ -38,6 +38,9 @@ final class SettingsViewModel {
         self.scheduler = scheduler
         self.defaults = defaults
         self.appVersion = appVersion
+        #if DEBUG
+        rateSourceMode = RateSourceMode.current(in: defaults)
+        #endif
         isReminderEnabled = defaults.bool(forKey: Keys.reminderEnabled)
         reminderInterval = ReminderInterval(rawValue: defaults.integer(forKey: Keys.reminderInterval)) ?? .everyThreeDays
         if let hour = defaults.object(forKey: Keys.reminderHour) as? Int,
@@ -62,6 +65,19 @@ final class SettingsViewModel {
         get { settings.homeCurrency }
         set { settings.homeCurrency = newValue }
     }
+
+    #if DEBUG
+    // MARK: - Розробка (лише Debug)
+
+    /// Джерело курсів: реальне API або режим mock. Зміна одразу перезавантажує курс на всіх екранах.
+    var rateSourceMode: RateSourceMode {
+        didSet {
+            guard rateSourceMode != oldValue else { return }
+            defaults.set(rateSourceMode.rawValue, forKey: RateSourceMode.defaultsKey)
+            Task { await converter.reload() }
+        }
+    }
+    #endif
 
     // MARK: - Нагадування
 
