@@ -36,4 +36,8 @@ final class InMemoryWalletRepository: WalletRepository {
         }
         storage.insert(contentsOf: moving, at: min(max(insertAt, 0), storage.count))
     }
+
+    func replaceAll(with wallets: [CashWallet]) {
+        storage = wallets
+    }
 }

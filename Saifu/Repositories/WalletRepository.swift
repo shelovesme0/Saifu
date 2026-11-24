@@ -9,6 +9,9 @@ protocol WalletRepository {
     func remove(id: CashWallet.ID) throws
     /// Змінює порядок гаманців (як у List.onMove); порядок бачать усі екрани.
     func move(fromOffsets source: IndexSet, toOffset destination: Int) throws
+    /// Замінює всі гаманці (імпорт резервної копії); порядок — як у масиві.
+    /// Якщо запис не вдався, кидає `RepositoryError`, а попередні дані лишаються без змін.
+    func replaceAll(with wallets: [CashWallet]) throws
 }
 
 extension WalletRepository {
