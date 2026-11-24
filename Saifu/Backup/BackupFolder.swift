@@ -1,18 +1,37 @@
 import Foundation
 
-/// Імена файлів копій: `Saifu-backup-2026-11-24-1805.json`. Імена сортуються так само, як час створення.
-enum BackupFileName {
+/// Імена файлів копій. Імена з датою сортуються так само, як час створення.
+nonisolated enum BackupFileName {
+    /// Актуальна копія, перезаписується після кожної зміни.
+    static let latest = "Saifu-latest.json"
+    /// Щоденні знімки `Saifu-backup-2026-11-24.json` і ручний експорт `Saifu-backup-2026-11-24-1805.json`.
     static let autoPrefix = "Saifu-backup-"
     static let preImportPrefix = "Saifu-before-import-"
     static let fileExtension = "json"
 
+    /// Щоденний знімок: `Saifu-backup-2026-11-24.json`.
+    static func daily(date: Date) -> String {
+        autoPrefix + format(date, "yyyy-MM-dd") + "." + fileExtension
+    }
+
+    /// `Saifu-backup-` + `yyyy-MM-dd` (10 символів) + `.json`.
+    static func isDailySnapshot(_ name: String) -> Bool {
+        guard name.hasPrefix(autoPrefix), name.hasSuffix("." + fileExtension) else { return false }
+        let datePart = name.dropFirst(autoPrefix.count).dropLast(fileExtension.count + 1)
+        return datePart.count == 10 && datePart.allSatisfy { $0.isNumber || $0 == "-" }
+    }
+
     /// Ім'я без розширення (для `.fileExporter`, який додає розширення сам).
     static func baseName(prefix: String, date: Date) -> String {
+        prefix + format(date, "yyyy-MM-dd-HHmm")
+    }
+
+    private static func format(_ date: Date, _ pattern: String) -> String {
         let formatter = DateFormatter()
         // POSIX: цифри й формат не залежать від мови та 12/24-годинного часу на пристрої
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd-HHmm"
-        return prefix + formatter.string(from: date)
+        formatter.dateFormat = pattern
+        return formatter.string(from: date)
     }
 
     static func fileName(prefix: String, date: Date) -> String {
@@ -44,7 +63,8 @@ enum AppContainer {
 }
 
 /// Папка для автоматичних копій, яку один раз обрав користувач.
-protocol BackupFolderAccess {
+/// nonisolated і Sendable: автокопія пишеться поза головним потоком, щоб не блокувати UI.
+nonisolated protocol BackupFolderAccess: Sendable {
     /// Чи обрано папку.
     var isConfigured: Bool { get }
     /// Назва папки для показу; nil, якщо не обрано.
@@ -54,13 +74,15 @@ protocol BackupFolderAccess {
     func clear()
     /// Записує файл у папку (наявний з тим самим іменем замінюється). Кидає `folderUnavailable` або `writeFailed`.
     func write(_ data: Data, fileName: String) throws
-    /// Лишає `keep` найновіших файлів з іменем на `prefix`, решту видаляє.
-    func removeOldFiles(prefix: String, keep: Int) throws
+    /// Автокопія: перезаписує `Saifu-latest.json`; якщо сьогоднішнього знімка ще немає — створює його
+    /// і лишає `keepDaily` найновіших. Кидає `folderUnavailable` або `writeFailed`.
+    func saveAutoBackup(_ data: Data, date: Date, keepDaily: Int) throws
 }
 
 /// Зберігає доступ до папки як security-scoped bookmark у UserDefaults.
 /// Bookmark переживає перезапуск застосунку; на iOS для цього не потрібні entitlements.
-final class BookmarkBackupFolder: BackupFolderAccess {
+/// `@unchecked Sendable`: властивості лише `let`, а UserDefaults і FileManager потокобезпечні (документація Apple).
+nonisolated final class BookmarkBackupFolder: BackupFolderAccess, @unchecked Sendable {
     enum Keys {
         static let bookmark = "backupFolderBookmark"
         static let folderName = "backupFolderName"
@@ -106,15 +128,31 @@ final class BookmarkBackupFolder: BackupFolderAccess {
         }
     }
 
-    func removeOldFiles(prefix: String, keep: Int) throws {
+    func saveAutoBackup(_ data: Data, date: Date, keepDaily: Int) throws {
         try withFolder { folder in
-            let names = (try? fileManager.contentsOfDirectory(atPath: folder.path)) ?? []
-            let backups = names
-                .filter { $0.hasPrefix(prefix) && $0.hasSuffix("." + BackupFileName.fileExtension) }
-                .sorted(by: >) // новіші — першими
-            for name in backups.dropFirst(keep) {
-                try? fileManager.removeItem(at: folder.appendingPathComponent(name))
+            do {
+                // .atomic: спершу тимчасовий файл, потім заміна — обірваний запис не зіпсує попередню копію
+                try data.write(to: folder.appendingPathComponent(BackupFileName.latest), options: .atomic)
+                let daily = folder.appendingPathComponent(BackupFileName.daily(date: date))
+                // Знімок — не частіше одного на день: перша зміна дня його створює
+                guard !fileManager.fileExists(atPath: daily.path) else { return }
+                try data.write(to: daily, options: .atomic)
+            } catch {
+                throw BackupError.writeFailed
             }
+            removeOldDailySnapshots(in: folder, keep: keepDaily)
+        }
+    }
+
+    /// Лишає `keep` найновіших щоденних знімків, решту видаляє.
+    /// Ручні експорти (`…-HHmm.json`), latest і файли інших застосунків не чіпаються.
+    private func removeOldDailySnapshots(in folder: URL, keep: Int) {
+        let names = (try? fileManager.contentsOfDirectory(atPath: folder.path)) ?? []
+        let backups = names
+            .filter(BackupFileName.isDailySnapshot)
+            .sorted(by: >) // новіші — першими
+        for name in backups.dropFirst(keep) {
+            try? fileManager.removeItem(at: folder.appendingPathComponent(name))
         }
     }
 
@@ -122,11 +160,13 @@ final class BookmarkBackupFolder: BackupFolderAccess {
     private func withFolder(_ body: (URL) throws -> Void) throws {
         guard let bookmark = defaults.data(forKey: Keys.bookmark) else { throw BackupError.folderUnavailable }
         var isStale = false
-        guard let url = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &isStale),
-              url.startAccessingSecurityScopedResource() else {
+        guard let url = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &isStale) else {
             throw BackupError.folderUnavailable
         }
-        defer { url.stopAccessingSecurityScopedResource() }
+        // false означає, що URL не потребує security scope (наприклад, звичайна папка), а не відмову:
+        // чи є доступ, покаже перевірка нижче й сам запис
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
 
         // Папку могли видалити, хоча bookmark ще розпізнається
         var isDirectory: ObjCBool = false

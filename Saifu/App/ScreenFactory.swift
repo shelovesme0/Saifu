@@ -25,6 +25,9 @@ final class ScreenFactory {
          appVersion: String,
          router: AppRouter,
          startupWarning: String? = nil) {
+        // Усі екрани працюють через декоратор, тож автокопія дізнається про кожну зміну даних
+        let notifyingRepository = ChangeNotifyingWalletRepository(inner: repository)
+        let repository: WalletRepository = notifyingRepository
         self.repository = repository
         self.router = router
         self.startupWarning = startupWarning
@@ -69,14 +72,20 @@ final class ScreenFactory {
                 analyticsViewModel.dataReplaced()
             }
         )
+        let backupViewModel = backupViewModel
+        notifyingRepository.onChange = { [weak backupViewModel] in
+            backupViewModel?.dataChanged()
+        }
     }
 
-    /// Вихід у фон: автоматична резервна копія. Фонове завдання дає iOS дочекатися запису файлу.
+    /// Вихід у фон: незаписані зміни автокопії пишуться одразу.
+    /// Фонове завдання не дає iOS призупинити застосунок посеред запису файлу.
     func appDidEnterBackground() {
-        let task = UIApplication.shared.beginBackgroundTask(withName: "Saifu backup")
-        backupViewModel.appDidEnterBackground()
-        if task != .invalid {
-            UIApplication.shared.endBackgroundTask(task)
+        let backgroundTask = BackgroundTask(name: "Saifu backup")
+        let backupViewModel = backupViewModel
+        Task {
+            await backupViewModel.appDidEnterBackground()
+            backgroundTask.end()
         }
     }
 
@@ -159,6 +168,23 @@ final class ScreenFactory {
             // Та сама ViewModel, що й в аналітиці: sheet редагує її чернетку періоду
             AnalyticsPeriodView(viewModel: analyticsViewModel)
         }
+    }
+}
+
+/// Обгортка над `beginBackgroundTask`: завершується або після роботи, або коли iOS вичерпала час.
+private final class BackgroundTask {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }
 

@@ -2,23 +2,21 @@ import Foundation
 import Observation
 
 /// Резервна копія в налаштуваннях: автоматична копія в обрану папку, ручні експорт та імпорт.
+/// Автокопія: `Saifu-latest.json` перезаписується через ~3 с після останньої зміни даних (серія змін — один запис),
+/// при першій зміні дня створюється щоденний знімок. Запис — лише якщо відбиток даних змінився.
 @MainActor
 @Observable
 final class BackupViewModel {
     enum Keys {
         static let autoBackupEnabled = "autoBackupEnabled"
-        /// Остання будь-яка копія (автоматична чи експорт) — для показу.
+        /// Час останнього запису `Saifu-latest.json` — для показу.
         static let lastBackupDate = "lastBackupDate"
-        /// Остання автоматична копія — для обмеження «не частіше разу на годину».
-        static let lastAutoBackupDate = "lastAutoBackupDate"
         /// Відбиток даних останньої автоматичної копії: якщо не змінився, нова копія не потрібна.
         static let lastAutoBackupFingerprint = "lastAutoBackupFingerprint"
     }
 
-    /// Скільки автоматичних копій зберігати в папці.
-    static let keepCount = 7
-    /// Мінімальний проміжок між автоматичними копіями.
-    static let minInterval: TimeInterval = 60 * 60
+    /// Скільки щоденних знімків зберігати в папці.
+    static let keepDailyCount = 7
 
     /// Що вибирається в системному пікері (на екрані один `.fileImporter`).
     enum PickerMode {
@@ -52,15 +50,26 @@ final class BackupViewModel {
     /// Перевірені гаманці з файлу, що чекають підтвердження заміни.
     private var pendingWallets: [CashWallet]?
 
+    /// Пауза після останньої зміни перед записом.
+    private let debounceDelay: Duration
+    /// Відкладений запис; нова зміна скасовує його й ставить заново.
+    @ObservationIgnored private var debounceTask: Task<Void, Never>?
+    /// Останній запущений запис: наступний чекає на нього, тож записи йдуть строго по черзі.
+    @ObservationIgnored private var currentWrite: Task<BackupError?, Never>?
+    /// Є зміни, які ще не записано (дебаунс не спрацював).
+    @ObservationIgnored private(set) var hasPendingChanges = false
+
     init(service: any BackupService,
          folder: any BackupFolderAccess,
          defaults: UserDefaults,
          localDirectory: URL,
+         debounceDelay: Duration = .seconds(3),
          onDataReplaced: @escaping () -> Void) {
         self.service = service
         self.folder = folder
         self.defaults = defaults
         self.localDirectory = localDirectory
+        self.debounceDelay = debounceDelay
         self.onDataReplaced = onDataReplaced
         isAutoBackupEnabled = defaults.bool(forKey: Keys.autoBackupEnabled) && folder.isConfigured
         lastBackupDate = defaults.object(forKey: Keys.lastBackupDate) as? Date
@@ -92,6 +101,9 @@ final class BackupViewModel {
         guard enabled else {
             isAutoBackupEnabled = false
             isFolderUnavailable = false
+            debounceTask?.cancel()
+            debounceTask = nil
+            hasPendingChanges = false
             defaults.set(false, forKey: Keys.autoBackupEnabled)
             folder.clear()
             return
@@ -106,16 +118,71 @@ final class BackupViewModel {
         presentPicker(.folder)
     }
 
-    /// Вихід у фон: копія, якщо є незбережені зміни і від минулої пройшло не менше години.
-    func appDidEnterBackground() {
+    /// Дані змінилися (викликає `ChangeNotifyingWalletRepository`): запис через `debounceDelay`.
+    func dataChanged() {
         guard isAutoBackupEnabled else { return }
-        if let last = defaults.object(forKey: Keys.lastAutoBackupDate) as? Date,
-           Date().timeIntervalSince(last) < Self.minInterval {
+        hasPendingChanges = true
+        debounceTask?.cancel()
+        debounceTask = Task { [weak self, debounceDelay] in
+            try? await Task.sleep(for: debounceDelay)
+            guard !Task.isCancelled, let self else { return }
+            debounceTask = nil
+            _ = await startWrite().value
+        }
+    }
+
+    /// Вихід у фон: незаписані зміни пишуться одразу, не чекаючи дебаунсу.
+    /// Викликається всередині фонового завдання (`ScreenFactory.appDidEnterBackground`).
+    func appDidEnterBackground() async {
+        guard hasPendingChanges else {
+            // Можливо, саме йде запис — дочекаємося, щоб iOS не призупинила його посередині
+            _ = await currentWrite?.value
             return
         }
+        debounceTask?.cancel()
+        debounceTask = nil
+        _ = await startWrite().value
+    }
+
+    /// Ставить запис у чергу за попереднім.
+    private func startWrite() -> Task<BackupError?, Never> {
+        let previous = currentWrite
+        let task = Task { [weak self] () -> BackupError? in
+            _ = await previous?.value
+            return await self?.writeIfChanged()
+        }
+        currentWrite = task
+        return task
+    }
+
+    /// Записує копію, якщо дані змінилися з минулого запису. Повертає помилку для повідомлення.
+    private func writeIfChanged() async -> BackupError? {
+        guard isAutoBackupEnabled else { return nil }
+        hasPendingChanges = false
+        // JSON готується на головному акторі (дані живуть там), а файлові операції — у фоні
         guard let fingerprint = try? service.fingerprint(),
-              fingerprint != defaults.string(forKey: Keys.lastAutoBackupFingerprint) else { return }
-        try? writeAutoBackup(fingerprint: fingerprint)
+              fingerprint != defaults.string(forKey: Keys.lastAutoBackupFingerprint) else { return nil }
+        guard let data = try? service.exportData() else { return .writeFailed }
+        let folder = folder
+        let now = Date()
+        let keep = Self.keepDailyCount
+        let result = await Task.detached(priority: .utility) {
+            Result { try folder.saveAutoBackup(data, date: now, keepDaily: keep) }
+        }.value
+
+        switch result {
+        case .success:
+            isFolderUnavailable = false
+            defaults.set(fingerprint, forKey: Keys.lastAutoBackupFingerprint)
+            recordBackup(at: now)
+            return nil
+        case .failure(let error):
+            let backupError = error as? BackupError ?? .writeFailed
+            if backupError == .folderUnavailable {
+                isFolderUnavailable = true
+            }
+            return backupError
+        }
     }
 
     private func folderPicked(_ url: URL) {
@@ -130,27 +197,20 @@ final class BackupViewModel {
             isFolderUnavailable = false
             isAutoBackupEnabled = true
             defaults.set(true, forKey: Keys.autoBackupEnabled)
-            // Перша копія одразу: заодно перевіряємо, що в папку можна писати
-            try writeAutoBackup(fingerprint: service.fingerprint())
-            message = Message(text: "Копію збережено в «\(url.lastPathComponent)»", isError: false)
+            // Нова папка порожня: відбиток скидаємо, щоб перша копія записалася навіть без змін у даних
+            defaults.removeObject(forKey: Keys.lastAutoBackupFingerprint)
         } catch {
             message = Message(text: BackupError.message(for: error), isError: true)
+            return
         }
-    }
-
-    private func writeAutoBackup(fingerprint: String) throws {
-        do {
-            let now = Date()
-            try folder.write(service.exportData(),
-                             fileName: BackupFileName.fileName(prefix: BackupFileName.autoPrefix, date: now))
-            try? folder.removeOldFiles(prefix: BackupFileName.autoPrefix, keep: Self.keepCount)
-            isFolderUnavailable = false
-            defaults.set(now, forKey: Keys.lastAutoBackupDate)
-            defaults.set(fingerprint, forKey: Keys.lastAutoBackupFingerprint)
-            recordBackup(at: now)
-        } catch BackupError.folderUnavailable {
-            isFolderUnavailable = true
-            throw BackupError.folderUnavailable
+        // Перша копія одразу: заодно перевіряємо, що в папку можна писати
+        let name = url.lastPathComponent
+        Task {
+            if let error = await startWrite().value {
+                message = Message(text: error.userMessage, isError: true)
+            } else {
+                message = Message(text: "Копію збережено в «\(name)»", isError: false)
+            }
         }
     }
 
@@ -171,7 +231,6 @@ final class BackupViewModel {
         exportDocument = nil
         switch result {
         case .success(let url):
-            recordBackup(at: Date())
             if AppContainer.contains(url) {
                 message = Message(text: "Копію експортовано, але " + BackupError.folderInsideApp.userMessage.lowercasedFirst,
                                   isError: true)

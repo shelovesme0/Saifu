@@ -322,7 +322,7 @@ Endpoint, реальні відповіді й покрокова перевір
 - **Сервіс за протоколом.** `BackupViewModel` знає лише `BackupService` (експорт, відбиток, перевірка, відновлення) і `BackupFolderAccess` (папка автокопій). Формат JSON і bookmark-и сховані в `JSONBackupService` і `BookmarkBackupFolder`.
 - **Атомарна заміна.** Новий метод `WalletRepository.replaceAll(with:)`. У SwiftData це одна транзакція: при помилці контекст відкочується, і масив у пам'яті не змінюється. Перед заміною зберігається копія поточних даних.
 - **Оновлення екранів.** Заміна масиву в `@Observable` репозиторії оновлює кореневі екрани. Екрани, що тримали старі екземпляри `CashWallet`, закриваються через `AppRouter.resetNavigation()`, а `WalletViewModel.dataReplaced()` скидає кеш форм додавання.
-- **Коли пишеться автокопія.** `RootView` при `scenePhase == .background` викликає `ScreenFactory.appDidEnterBackground()`. Копія пишеться не частіше разу на годину і лише якщо SHA-256 даних змінився.
+- **Коли пишеться автокопія.** Декоратор `ChangeNotifyingWalletRepository` повідомляє `BackupViewModel` про кожну зміну даних. `Saifu-latest.json` пишеться з дебаунсом ~3 с і лише якщо SHA-256 даних змінився. Файлові операції йдуть у фоновому завданні, щоб не блокувати UI. При `scenePhase == .background` незаписані зміни пишуться одразу (`ScreenFactory.appDidEnterBackground()` з `beginBackgroundTask`). Щоденні знімки створюються не частіше одного на день, лишаються 7 найновіших.
 
 Формат, правила перевірки, ротація й покрокова перевірка: [backup.md](backup.md).
 
@@ -343,6 +343,7 @@ Endpoint, реальні відповіді й покрокова перевір
 | Decorator | `CachedRecordSource` | Кеш на день поверх будь-якого `NBURecordSource` |
 | Service за протоколом | `ReminderScheduling`, `LocalReminderScheduler` | Нагадування про звірку, підміна в превʼю |
 | Service за протоколом | `BackupService`, `JSONBackupService`, `BackupFolderAccess`, `BookmarkBackupFolder` | Резервна копія: формат і папка приховані від ViewModel |
+| Decorator | `ChangeNotifyingWalletRepository` | Повідомлення про зміни даних для автокопії поверх будь-якого репозиторію |
 | DTO | `Backup/BackupDTO.swift` | Версійований формат файлу копії окремо від моделей |
 | Спільний стан | `AppSettings`, `CurrencyConverter` | Домашня валюта і крос-курс для всіх екранів |
 | Composition root | `SaifuApp` | Єдине місце створення залежностей |
