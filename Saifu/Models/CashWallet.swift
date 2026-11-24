@@ -21,6 +21,21 @@ final class CashWallet: Identifiable {
         self.currency = currency
     }
 
+    /// Відновлення гаманця зі сховища: записи вже перевірені при додаванні, тому беруться як є.
+    init(id: UUID,
+         name: String,
+         currency: Currency,
+         expenses: [Expense],
+         topUps: [CashTopUp],
+         lastReconciliation: Reconciliation?) {
+        self.id = id
+        self.name = name
+        self.currency = currency
+        self.expenses = expenses
+        self.topUps = topUps
+        self.lastReconciliation = lastReconciliation
+    }
+
     /// Чи немає в гаманці жодного запису (витрат і поповнень).
     var hasNoEntries: Bool {
         expenses.isEmpty && topUps.isEmpty
