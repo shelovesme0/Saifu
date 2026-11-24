@@ -30,11 +30,17 @@ struct WalletsView: View {
                     viewModel.move(fromOffsets: source, toOffset: destination)
                 }
             } footer: {
-                Text(viewModel.canDelete
-                     ? "Свайп ліворуч — видалити. «Змінити» — перетягнути, щоб змінити порядок карток."
-                     : "Останній гаманець видалити не можна.")
-                    .font(Theme.captionFont)
-                    .foregroundStyle(Theme.secondaryText)
+                VStack(alignment: .leading, spacing: 6) {
+                    if let message = viewModel.errorMessage {
+                        Label(message, systemImage: "exclamationmark.circle")
+                            .foregroundStyle(Theme.negative)
+                    }
+                    Text(viewModel.canDelete
+                         ? "Свайп ліворуч — видалити. «Змінити» — перетягнути, щоб змінити порядок карток."
+                         : "Останній гаманець видалити не можна.")
+                        .foregroundStyle(Theme.secondaryText)
+                }
+                .font(Theme.captionFont)
             }
 
             Section {

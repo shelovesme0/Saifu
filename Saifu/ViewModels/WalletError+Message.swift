@@ -12,8 +12,22 @@ extension WalletError {
         }
     }
 
-    /// Текст для будь-якої помилки: WalletError має свій, інші — `fallback`.
+    /// Текст для будь-якої помилки: WalletError і RepositoryError мають свій, інші — `fallback`.
     static func message(for error: any Error, fallback: String) -> String {
-        (error as? WalletError)?.userMessage ?? fallback
+        if let walletError = error as? WalletError {
+            return walletError.userMessage
+        }
+        if let repositoryError = error as? RepositoryError {
+            return repositoryError.userMessage
+        }
+        return fallback
+    }
+}
+
+extension RepositoryError {
+    var userMessage: String {
+        switch self {
+        case .saveFailed: return "Не вдалося зберегти зміни на пристрої. Спробуйте ще раз"
+        }
     }
 }

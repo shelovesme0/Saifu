@@ -57,7 +57,7 @@ final class WalletFormViewModel {
             if let wallet {
                 wallet.name = trimmedName
                 try wallet.changeCurrency(to: currency)
-                repository.save(wallet)
+                try repository.save(wallet)
             } else {
                 let wallet = CashWallet(name: trimmedName, currency: currency)
                 if !initialAmountText.isEmpty {
@@ -67,7 +67,7 @@ final class WalletFormViewModel {
                         try wallet.addTopUp(CashTopUp(amount: amount, source: .atm))
                     }
                 }
-                repository.save(wallet)
+                try repository.save(wallet)
             }
             errorMessage = nil
             router.popWallets()

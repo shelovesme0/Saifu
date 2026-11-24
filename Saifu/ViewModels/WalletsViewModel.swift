@@ -16,6 +16,8 @@ struct WalletSummary: Identifiable, Equatable {
 final class WalletsViewModel {
     private let repository: WalletRepository
     private let router: AppRouter
+    /// Текст помилки збереження (видалення чи порядок не записалися на пристрій).
+    private(set) var errorMessage: String?
 
     init(repository: WalletRepository, router: AppRouter) {
         self.repository = repository
@@ -47,12 +49,22 @@ final class WalletsViewModel {
 
     func delete(id: UUID) {
         guard canDelete else { return }
-        repository.remove(id: id)
+        do {
+            try repository.remove(id: id)
+            errorMessage = nil
+        } catch {
+            errorMessage = WalletError.message(for: error, fallback: "Не вдалося видалити гаманець")
+        }
     }
 
     /// Порядок зберігається в репозиторії, тож свайп-картки й меню аналітики змінюються одразу.
     func move(fromOffsets source: IndexSet, toOffset destination: Int) {
-        repository.move(fromOffsets: source, toOffset: destination)
+        do {
+            try repository.move(fromOffsets: source, toOffset: destination)
+            errorMessage = nil
+        } catch {
+            errorMessage = WalletError.message(for: error, fallback: "Не вдалося змінити порядок гаманців")
+        }
     }
 
     func doneTapped() {

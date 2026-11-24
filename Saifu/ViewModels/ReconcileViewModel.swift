@@ -83,7 +83,7 @@ final class ReconcileViewModel {
         do {
             let actual = try wallet.currency.parseMinor(actualText)
             try wallet.reconcile(actualCash: actual)
-            repository.save(wallet)
+            try repository.save(wallet)
             errorMessage = nil
             router.dismissSheet()
         } catch {
